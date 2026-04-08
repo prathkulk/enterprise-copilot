@@ -1,49 +1,77 @@
-from datetime import datetime
-
-from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, ConfigDict
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
 from backend.app.db.session import get_db_session
-from backend.app.models.collection import Collection
+from backend.app.schemas.collections import (
+    CollectionCreate,
+    CollectionResponse,
+    CollectionUpdate,
+)
+from backend.app.services.collection_service import (
+    CollectionConflictError,
+    CollectionNotFoundError,
+    create_collection as create_collection_record,
+    delete_collection as delete_collection_record,
+    get_collection as get_collection_record,
+    list_collections as list_collection_records,
+    update_collection as update_collection_record,
+)
 
 router = APIRouter(prefix="/collections", tags=["collections"])
 
 
-class CollectionCreate(BaseModel):
-    name: str
-    description: str | None = None
-
-
-class CollectionResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
-    name: str
-    description: str | None
-    created_at: datetime
-    updated_at: datetime
-
-
 @router.post("", response_model=CollectionResponse, status_code=status.HTTP_201_CREATED)
-def create_collection(
-    payload: CollectionCreate, db: Session = Depends(get_db_session)
-) -> Collection:
-    collection = Collection(name=payload.name, description=payload.description)
-    db.add(collection)
-    db.commit()
-    db.refresh(collection)
-    return collection
+def create_collection(payload: CollectionCreate, db: Session = Depends(get_db_session)):
+    try:
+        return create_collection_record(db, payload)
+    except CollectionConflictError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A collection with that name already exists.",
+        ) from exc
+
+
+@router.get("", response_model=list[CollectionResponse])
+def list_collections(db: Session = Depends(get_db_session)):
+    return list_collection_records(db)
 
 
 @router.get("/{collection_id}", response_model=CollectionResponse)
-def get_collection(
-    collection_id: int, db: Session = Depends(get_db_session)
-) -> Collection:
-    collection = db.get(Collection, collection_id)
-    if collection is None:
+def get_collection(collection_id: int, db: Session = Depends(get_db_session)):
+    try:
+        return get_collection_record(db, collection_id)
+    except CollectionNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Collection not found",
-        )
-    return collection
+        ) from exc
+
+
+@router.patch("/{collection_id}", response_model=CollectionResponse)
+def update_collection(
+    collection_id: int, payload: CollectionUpdate, db: Session = Depends(get_db_session)
+):
+    try:
+        return update_collection_record(db, collection_id, payload)
+    except CollectionNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Collection not found",
+        ) from exc
+    except CollectionConflictError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A collection with that name already exists.",
+        ) from exc
+
+
+@router.delete("/{collection_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_collection(collection_id: int, db: Session = Depends(get_db_session)) -> Response:
+    try:
+        delete_collection_record(db, collection_id)
+    except CollectionNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Collection not found",
+        ) from exc
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

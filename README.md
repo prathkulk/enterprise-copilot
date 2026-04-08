@@ -118,7 +118,10 @@ docker compose down
 - `GET /version` returns the API version payload.
 - `GET /docs` opens the Swagger UI.
 - `POST /collections` creates a collection row in PostgreSQL.
+- `GET /collections` lists existing collections.
 - `GET /collections/{collection_id}` fetches a collection row back by id.
+- `PATCH /collections/{collection_id}` updates a collection.
+- `DELETE /collections/{collection_id}` deletes a collection.
 - `POST /debug/vector-search/seed` inserts mock chunk rows with fake embeddings.
 - `POST /debug/vector-search/query` runs a temporary top-k similarity search.
 
