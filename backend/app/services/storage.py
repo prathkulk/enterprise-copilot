@@ -55,9 +55,13 @@ class LocalFileStorage:
         if not storage_path:
             return
 
-        target_path = Path(storage_path)
-        if not target_path.is_absolute():
-            target_path = Path.cwd() / target_path
+        target_path = self.resolve_path(storage_path)
 
         if target_path.exists():
             target_path.unlink()
+
+    def resolve_path(self, storage_path: str) -> Path:
+        target_path = Path(storage_path)
+        if not target_path.is_absolute():
+            target_path = Path.cwd() / target_path
+        return target_path

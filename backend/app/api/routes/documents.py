@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from backend.app.db.session import get_db_session
 from backend.app.schemas.documents import (
     DocumentDetailResponse,
+    DocumentExtractionResponse,
     DocumentListItem,
     DocumentUploadResponse,
 )
@@ -15,6 +16,10 @@ from backend.app.services.document_service import (
     get_document_detail as get_document_detail_record,
     list_documents_for_collection as list_documents_for_collection_records,
     upload_document as upload_document_record,
+)
+from backend.app.services.text_extraction import (
+    DocumentExtractionNotAvailableError,
+    extract_document_text as extract_document_text_record,
 )
 
 router = APIRouter(tags=["documents"])
@@ -81,3 +86,22 @@ def delete_document(document_id: int, db: Session = Depends(get_db_session)) -> 
             detail="Document not found",
         ) from exc
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post(
+    "/documents/{document_id}/extract",
+    response_model=DocumentExtractionResponse,
+)
+def extract_document_text(document_id: int, db: Session = Depends(get_db_session)):
+    try:
+        return extract_document_text_record(db=db, document_id=document_id)
+    except DocumentNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found",
+        ) from exc
+    except DocumentExtractionNotAvailableError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc

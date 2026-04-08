@@ -36,3 +36,11 @@ class DocumentListItem(BaseModel):
 class DocumentDetailResponse(DocumentListItem):
     created_at: datetime
     updated_at: datetime
+
+
+class DocumentExtractionResponse(BaseModel):
+    document_id: int
+    filename: str
+    source_type: str
+    extracted_text: str
+    parser_metadata: dict[str, Any]

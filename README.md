@@ -17,6 +17,7 @@ This initial commit sets up:
 - pgvector extension support and vector-ready chunk embeddings
 - document upload endpoint with local filesystem storage
 - document list, detail, and delete APIs
+- text extraction pipeline for TXT, PDF, and DOCX
 
 ## Project structure
 
@@ -43,8 +44,10 @@ This initial commit sets up:
 │   │   │   └── ingestion_job.py
 │   │   ├── services
 │   │   │   ├── collection_service.py
+│   │   │   ├── document_parsers.py
 │   │   │   ├── document_service.py
 │   │   │   ├── storage.py
+│   │   │   ├── text_extraction.py
 │   │   │   └── vector_search.py
 │   │   └── main.py
 │   ├── Dockerfile
@@ -132,6 +135,7 @@ docker compose down
 - `GET /collections/{collection_id}/documents` lists documents for a collection.
 - `GET /documents/{document_id}` fetches a single document with collection and ingestion details.
 - `DELETE /documents/{document_id}` removes a document and its stored file copy.
+- `POST /documents/{document_id}/extract` runs temporary raw-text extraction for an uploaded document.
 - `POST /debug/vector-search/seed` inserts mock chunk rows with fake embeddings.
 - `POST /debug/vector-search/query` runs a temporary top-k similarity search.
 
@@ -158,6 +162,12 @@ curl -X POST http://127.0.0.1:8000/collections/1/documents/upload \
   -F "file=@/path/to/sample.txt"
 ```
 
+To extract raw text from an uploaded document:
+
+```bash
+curl -X POST http://127.0.0.1:8000/documents/1/extract
+```
+
 The backend currently creates these relational tables:
 
 - `collections`
@@ -182,6 +192,20 @@ curl -X POST http://127.0.0.1:8000/debug/vector-search/query \
   -H "Content-Type: application/json" \
   -d '{"query_embedding":[1,0,0,0,0,0,0,0],"limit":2}'
 ```
+
+## Extraction verification
+
+Upload one TXT, one PDF, and one DOCX file, then call:
+
+```bash
+curl -X POST http://127.0.0.1:8000/documents/{document_id}/extract
+```
+
+The temporary response includes:
+
+- `extracted_text`
+- `parser_metadata`
+- PDF page markers when available
 
 ## Quick test
 
