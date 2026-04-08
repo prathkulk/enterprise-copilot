@@ -3,8 +3,8 @@ import "./globals.css";
 import { AuthProvider } from "@/components/auth-provider";
 
 export const metadata: Metadata = {
-  title: "Enterprise Copilot Demo",
-  description: "Minimal recruiter-ready RAG frontend for collections, uploads, and grounded Q&A.",
+  title: "Folio — Answers from your documents",
+  description: "Upload documents, ask questions in plain language, and get sourced answers you can verify.",
 };
 
 export default function RootLayout({

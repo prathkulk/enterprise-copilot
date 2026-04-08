@@ -16,11 +16,7 @@ import {
   ingestDocument,
 } from "@/lib/api";
 import { formatDate } from "@/lib/format";
-import type {
-  Collection,
-  DocumentListItem,
-  IngestionJobStatusResponse,
-} from "@/lib/types";
+import type { Collection, DocumentListItem, IngestionJobStatusResponse } from "@/lib/types";
 
 export default function DocumentsPage() {
   const params = useParams<{ collectionId: string }>();
@@ -34,186 +30,147 @@ export default function DocumentsPage() {
   const [busyDocumentIds, setBusyDocumentIds] = useState<number[]>([]);
 
   const selectedCollection = collections.find((item) => item.id === collectionId) ?? null;
-  const refreshPageDataEvent = useEffectEvent(() => {
-    void refreshPageData();
-  });
+  const refreshPageDataEvent = useEffectEvent(() => { void refreshPageData(); });
 
   async function refreshPageData() {
     setLoading(true);
     try {
-      const [collectionsResponse, documentsResponse] = await Promise.all([
-        fetchCollections(),
-        fetchDocuments(collectionId),
-      ]);
-      setCollections(collectionsResponse);
-      setDocuments(documentsResponse);
+      const [c, d] = await Promise.all([fetchCollections(), fetchDocuments(collectionId)]);
+      setCollections(c);
+      setDocuments(d);
       setError(null);
     } catch (caughtError) {
-      setError(
-        caughtError instanceof ApiError ? caughtError.detail : "We couldn't load the documents yet.",
-      );
+      setError(caughtError instanceof ApiError ? caughtError.detail : "Couldn't load documents right now.");
     } finally {
       setLoading(false);
     }
   }
 
   useEffect(() => {
-    if (!session || Number.isNaN(collectionId)) {
-      return;
-    }
-
+    if (!session || Number.isNaN(collectionId)) return;
     refreshPageDataEvent();
   }, [collectionId, session]);
 
   async function handleIngest(documentId: number) {
-    setBusyDocumentIds((current) => [...current, documentId]);
+    setBusyDocumentIds((c) => [...c, documentId]);
     setError(null);
-
     try {
       const queued = await ingestDocument(documentId);
       await pollJob(documentId, queued.id);
       await refreshPageData();
     } catch (caughtError) {
-      setError(
-        caughtError instanceof ApiError ? caughtError.detail : "We couldn't start indexing yet.",
-      );
+      setError(caughtError instanceof ApiError ? caughtError.detail : "Couldn't process this document right now.");
     } finally {
-      setBusyDocumentIds((current) => current.filter((item) => item !== documentId));
+      setBusyDocumentIds((c) => c.filter((id) => id !== documentId));
     }
   }
 
   async function pollJob(documentId: number, jobId: number) {
     while (true) {
       const status = await fetchJobStatus(jobId);
-      setJobStates((current) => ({ ...current, [documentId]: status }));
-
-      if (status.status === "indexed" || status.status === "failed") {
-        return;
-      }
-
-      await new Promise((resolve) => {
-        window.setTimeout(resolve, 1200);
-      });
+      setJobStates((c) => ({ ...c, [documentId]: status }));
+      if (status.status === "indexed" || status.status === "failed") return;
+      await new Promise((r) => setTimeout(r, 1200));
     }
   }
 
   async function handleDelete(documentId: number) {
-    const confirmed = window.confirm("Delete this document from the collection?");
-    if (!confirmed) {
-      return;
-    }
-
+    if (!window.confirm("Remove this document? This can't be undone.")) return;
     try {
       await deleteDocument(documentId);
-      setDocuments((current) => current.filter((document) => document.id !== documentId));
+      setDocuments((c) => c.filter((d) => d.id !== documentId));
     } catch (caughtError) {
-      setError(
-        caughtError instanceof ApiError ? caughtError.detail : "We couldn't delete that document yet.",
-      );
+      setError(caughtError instanceof ApiError ? caughtError.detail : "Couldn't delete that document right now.");
     }
   }
 
   return (
     <DashboardShell
-      title="Index documents"
-      description="This is where your uploaded files turn into something the assistant can actually search and quote back to you."
+      title="Documents"
+      description="Process your files to make them searchable."
+      collectionName={selectedCollection?.name}
+      collectionId={collectionId}
     >
       <div className="space-y-6">
-        <section className="panel rounded-[1.8rem] p-6">
-          <div className="grid gap-4 lg:grid-cols-[1fr_auto_auto] lg:items-end">
-            <div>
-              <p className="ui-mono text-xs uppercase tracking-[0.24em] text-[var(--accent)]">
-                Step 3
-              </p>
-              <h3 className="mt-3 text-2xl font-semibold">
-                {selectedCollection?.name ?? "Loading collection..."}
-              </h3>
-              <p className="mt-3 text-sm leading-6 text-[var(--muted)]">
-                Start indexing when you&apos;re ready. The app will extract the text, split it into chunks, embed it, and mark the document as searchable when it&apos;s done.
-              </p>
-            </div>
-
-            {collections.length > 0 ? (
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center gap-3">
+            {collections.length > 1 ? (
               <CollectionSwitcher
                 collections={collections}
                 selectedCollectionId={selectedCollection?.id ?? null}
-                routeBuilder={(nextCollectionId) => `/collections/${nextCollectionId}/documents`}
+                routeBuilder={(id) => `/collections/${id}/documents`}
               />
             ) : null}
-
-            <div className="flex flex-wrap gap-3 lg:justify-end">
-              <button type="button" onClick={() => void refreshPageData()} className="button-secondary">
-                Refresh
-              </button>
-              <Link href={`/collections/${collectionId}/ask`} className="button-primary">
-                Go to questions
-              </Link>
-            </div>
           </div>
+          <div className="flex flex-wrap gap-3">
+            <button type="button" onClick={() => void refreshPageData()} className="button-secondary !py-2 text-sm">
+              Refresh
+            </button>
+            <Link href={`/collections/${collectionId}/upload`} className="button-secondary !py-2 text-sm">
+              Upload files
+            </Link>
+            <Link href={`/collections/${collectionId}/ask`} className="button-primary !py-2 text-sm">
+              Ask questions
+            </Link>
+          </div>
+        </div>
 
-          {error ? (
-            <div className="mt-5 rounded-2xl border border-[rgba(159,47,47,0.18)] bg-[rgba(159,47,47,0.08)] px-4 py-3 text-sm text-[var(--danger)]">
-              {error}
-            </div>
-          ) : null}
-        </section>
+        {error ? (
+          <div className="rounded-2xl border border-[rgba(159,47,47,0.18)] bg-[rgba(159,47,47,0.08)] px-4 py-3 text-sm text-[var(--danger)]">
+            {error}
+          </div>
+        ) : null}
 
         {loading ? (
-          <div className="panel rounded-[1.8rem] p-6 text-[var(--muted)]">Loading documents...</div>
+          <div className="panel rounded-[1.6rem] p-6 text-[var(--muted)]">Loading documents...</div>
         ) : documents.length === 0 ? (
-          <div className="panel rounded-[1.8rem] p-8 text-center">
-            <h4 className="text-xl font-semibold">Nothing to index yet</h4>
-            <p className="mt-3 text-[var(--muted)]">
-              Upload a file first, then come back here when you want to make it searchable.
-            </p>
-            <div className="mt-6">
-              <Link href={`/collections/${collectionId}/upload`} className="button-primary">
-                Go to upload
-              </Link>
-            </div>
+          <div className="panel rounded-[1.6rem] p-10 text-center">
+            <h4 className="text-xl font-semibold">No documents here yet</h4>
+            <p className="mt-2 text-[var(--muted)]">Upload a file first, then come back to process it.</p>
+            <Link href={`/collections/${collectionId}/upload`} className="button-primary mt-5 inline-flex">
+              Upload a file
+            </Link>
           </div>
         ) : (
           <div className="grid gap-4">
             {documents.map((document) => {
               const jobState = jobStates[document.id];
               const busy = busyDocumentIds.includes(document.id);
-
               return (
-                <article key={document.id} className="panel rounded-[1.8rem] p-6">
-                  <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
-                    <div className="max-w-3xl">
-                      <div className="flex flex-wrap items-center gap-3">
+                <article key={document.id} className="panel rounded-[1.6rem] p-5">
+                  <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
                         <StatusPill status={jobState?.document_status ?? document.status} />
-                        <span className="ui-mono text-xs uppercase tracking-[0.18em] text-[var(--muted)]">
-                          {document.source_type}
-                        </span>
+                        <span className="text-xs uppercase text-[var(--muted)]">{document.source_type.toUpperCase()}</span>
                       </div>
-                      <h4 className="mt-4 text-2xl font-semibold">{document.filename}</h4>
-                      <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                        <Metric label="Uploaded" value={formatDate(document.uploaded_at)} />
-                        <Metric label="Chunks" value={String(jobState?.chunk_count ?? document.chunk_count)} />
-                        <Metric label="Embeddings" value={String(jobState?.embedding_count ?? 0)} />
+                      <h4 className="mt-2 truncate text-xl font-semibold">{document.filename}</h4>
+                      <div className="mt-3 flex flex-wrap gap-4 text-sm text-[var(--muted)]">
+                        <span>Uploaded {formatDate(document.uploaded_at)}</span>
+                        <span>{jobState?.chunk_count ?? document.chunk_count} sections</span>
+                        {(jobState?.embedding_count ?? 0) > 0 ? (
+                          <span className="text-[var(--success)]">Processed</span>
+                        ) : null}
                       </div>
                       {jobState?.error_message ? (
-                        <p className="mt-4 text-sm text-[var(--danger)]">{jobState.error_message}</p>
+                        <p className="mt-2 text-sm text-[var(--danger)]">{jobState.error_message}</p>
                       ) : null}
                     </div>
-
-                    <div className="flex flex-wrap gap-3 xl:w-72 xl:flex-col">
+                    <div className="flex shrink-0 gap-2">
                       <button
                         type="button"
                         onClick={() => void handleIngest(document.id)}
                         disabled={busy}
-                        className="button-primary"
+                        className="button-primary !py-2 text-sm"
                       >
-                        {busy ? "Indexing..." : "Start indexing"}
+                        {busy ? "Processing..." : "Process"}
                       </button>
                       <button
                         type="button"
                         onClick={() => void handleDelete(document.id)}
-                        className="button-secondary"
+                        className="button-secondary !py-2 text-sm"
                       >
-                        Delete document
+                        Remove
                       </button>
                     </div>
                   </div>
@@ -224,14 +181,5 @@ export default function DocumentsPage() {
         )}
       </div>
     </DashboardShell>
-  );
-}
-
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-[1.4rem] bg-white/76 px-4 py-4">
-      <p className="ui-mono text-xs uppercase tracking-[0.18em] text-[var(--muted)]">{label}</p>
-      <p className="mt-2 text-sm font-medium text-[var(--ink)]">{value}</p>
-    </div>
   );
 }

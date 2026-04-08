@@ -30,7 +30,7 @@ export default function AskPage() {
       setError(null);
     } catch (caughtError) {
       setError(
-        caughtError instanceof ApiError ? caughtError.detail : "We couldn't load the collections yet.",
+        caughtError instanceof ApiError ? caughtError.detail : "Couldn't load collections right now.",
       );
     } finally {
       setLoading(false);
@@ -38,10 +38,7 @@ export default function AskPage() {
   }
 
   useEffect(() => {
-    if (!session || Number.isNaN(collectionId)) {
-      return;
-    }
-
+    if (!session || Number.isNaN(collectionId)) return;
     void refreshCollections();
   }, [collectionId, session]);
 
@@ -51,14 +48,11 @@ export default function AskPage() {
     setError(null);
 
     try {
-      const answer = await askCollection({
-        question,
-        collection_id: collectionId,
-      });
+      const answer = await askCollection({ question, collection_id: collectionId });
       setResponse(answer);
     } catch (caughtError) {
       setError(
-        caughtError instanceof ApiError ? caughtError.detail : "We couldn't answer that yet.",
+        caughtError instanceof ApiError ? caughtError.detail : "Couldn't get an answer right now. Try again?",
       );
     } finally {
       setBusy(false);
@@ -67,36 +61,27 @@ export default function AskPage() {
 
   return (
     <DashboardShell
-      title="Ask a question"
-      description="Ask in plain language, then keep the answer, the source cards, and the supporting text all in one view."
+      title="Ask"
+      description="Ask about your documents in plain language."
+      collectionName={selectedCollection?.name}
+      collectionId={collectionId}
     >
       <div className="grid gap-6 xl:grid-cols-[0.92fr_1.08fr]">
         <section className="space-y-6">
-          <div className="panel rounded-[1.8rem] p-6">
-            <p className="ui-mono text-xs uppercase tracking-[0.24em] text-[var(--accent)]">
-              Step 4
-            </p>
-            <h3 className="mt-3 text-2xl font-semibold">
-              {selectedCollection?.name ?? "Loading collection..."}
-            </h3>
-            <p className="mt-3 text-sm leading-6 text-[var(--muted)]">
-              Ask about this collection the way you would ask a teammate. The answer should read naturally, and the evidence should stay easy to inspect.
+          <div className="panel rounded-[1.6rem] p-6">
+            <p className="mt-1 text-sm leading-6 text-[var(--muted)]">
+              The more specific your question, the better the answer.
             </p>
 
-            <div className="mt-6">
-              {collections.length > 0 ? (
-                <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
-                  <CollectionSwitcher
-                    collections={collections}
-                    selectedCollectionId={selectedCollection?.id ?? null}
-                    routeBuilder={(nextCollectionId) => `/collections/${nextCollectionId}/ask`}
-                  />
-                  <button type="button" onClick={() => void refreshCollections()} className="button-secondary">
-                    Refresh
-                  </button>
-                </div>
-              ) : null}
-            </div>
+            {collections.length > 1 ? (
+              <div className="mt-5">
+                <CollectionSwitcher
+                  collections={collections}
+                  selectedCollectionId={selectedCollection?.id ?? null}
+                  routeBuilder={(id) => `/collections/${id}/ask`}
+                />
+              </div>
+            ) : null}
 
             {error ? (
               <div className="mt-5 rounded-2xl border border-[rgba(159,47,47,0.18)] bg-[rgba(159,47,47,0.08)] px-4 py-3 text-sm text-[var(--danger)]">
@@ -104,64 +89,49 @@ export default function AskPage() {
               </div>
             ) : null}
 
-            <form className="mt-6 space-y-4" onSubmit={submitQuestion}>
-              <label className="block">
-                <span className="mb-2 block text-sm font-medium text-[var(--muted)]">
-                  Question
-                </span>
-                <textarea
-                  required
-                  value={question}
-                  onChange={(event) => setQuestion(event.target.value)}
-                  className="field min-h-40 resize-y"
-                  placeholder="What strengths and experience does this resume highlight?"
-                />
-              </label>
+            <form className="mt-5 space-y-4" onSubmit={submitQuestion}>
+              <textarea
+                required
+                value={question}
+                onChange={(e) => setQuestion(e.target.value)}
+                className="field min-h-36 resize-y"
+                placeholder="e.g. What are the key qualifications listed in this resume?"
+              />
               <button type="submit" disabled={busy || loading} className="button-primary w-full">
-                {busy ? "Writing answer..." : "Ask question"}
+                {busy ? "Thinking..." : "Ask"}
               </button>
             </form>
           </div>
 
-          <div className="panel rounded-[1.8rem] p-6">
-            <p className="ui-mono text-xs uppercase tracking-[0.2em] text-[var(--accent-cool)]">
-              What to look for
-            </p>
-            <ul className="mt-4 space-y-3 text-sm leading-6 text-[var(--muted)]">
-              <li>The answer should sound human and direct, not like a debug statement.</li>
-              <li>The source cards should point back to real files and real chunks.</li>
-              <li>If the evidence is thin, the app should be honest about that without sounding evasive.</li>
+          <div className="panel rounded-[1.6rem] p-5">
+            <p className="ui-mono text-xs uppercase tracking-[0.2em] text-[var(--accent-cool)]">Tips</p>
+            <ul className="mt-3 space-y-2 text-sm leading-6 text-[var(--muted)]">
+              <li>Be specific — &quot;What Python experience does this person have?&quot; beats &quot;Tell me about this resume.&quot;</li>
+              <li>If there isn&apos;t enough info, Folio will say so rather than guess.</li>
+              <li>Check the sources below each answer to verify.</li>
             </ul>
           </div>
         </section>
 
         <section className="space-y-4">
-          <div className="panel rounded-[1.8rem] p-6">
+          <div className="panel rounded-[1.6rem] p-6">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="ui-mono text-xs uppercase tracking-[0.24em] text-[var(--accent-cool)]">
-                  Answer
-                </p>
-                <h3 className="mt-3 text-2xl font-semibold">What the app found</h3>
-              </div>
+              <h3 className="text-2xl font-semibold">Answer</h3>
               {response ? <ConfidenceBadge confidence={response.confidence} /> : null}
             </div>
 
             {loading ? (
-              <p className="mt-6 text-[var(--muted)]">Loading collections...</p>
+              <p className="mt-6 text-[var(--muted)]">Loading...</p>
             ) : response ? (
               <>
-                <article className="mt-6 rounded-[1.6rem] bg-white/78 p-5">
-                  <p className="ui-mono text-xs uppercase tracking-[0.18em] text-[var(--muted)]">
-                    Final answer
-                  </p>
-                  <p className="mt-4 text-lg leading-8">{response.answer}</p>
+                <article className="mt-6 rounded-[1.4rem] bg-white/78 p-5">
+                  <p className="text-lg leading-8">{response.answer}</p>
                   {response.missing_information.length > 0 ? (
-                    <div className="mt-5 rounded-[1.4rem] bg-[rgba(138,97,25,0.08)] px-4 py-4">
+                    <div className="mt-5 rounded-xl bg-[rgba(138,97,25,0.08)] px-4 py-3">
                       <p className="ui-mono text-xs uppercase tracking-[0.18em] text-[var(--warning)]">
-                        What the documents still don&apos;t cover
+                        Not fully covered in your documents
                       </p>
-                      <ul className="mt-3 space-y-2 text-sm text-[var(--muted)]">
+                      <ul className="mt-2 space-y-1 text-sm text-[var(--muted)]">
                         {response.missing_information.map((item) => (
                           <li key={item}>{item}</li>
                         ))}
@@ -169,83 +139,51 @@ export default function AskPage() {
                     </div>
                   ) : null}
                 </article>
-
-                <div className="grid gap-4 md:grid-cols-3">
-                  <MetricCard label="Total time" value={`${formatNumber(response.latency_ms.total_ms)} ms`} />
-                  <MetricCard label="Prompt version" value={response.prompt_version} />
-                  <MetricCard label="Model" value={response.providers.llm_model} />
-                </div>
+                <p className="mt-3 text-sm text-[var(--muted)]">
+                  Answered in {formatNumber(response.latency_ms.total_ms / 1000)}s
+                  {response.citations.length > 0
+                    ? ` · ${response.citations.length} source${response.citations.length === 1 ? "" : "s"}`
+                    : ""}
+                </p>
               </>
             ) : (
-              <div className="mt-6 rounded-[1.6rem] border border-dashed border-[var(--line)] px-5 py-10 text-center">
-                <h4 className="text-xl font-semibold">No answer yet</h4>
-                <p className="mt-3 text-[var(--muted)]">
-                  Ask something real and this area will fill with the answer, the sources, and the supporting text.
-                </p>
+              <div className="mt-6 rounded-[1.4rem] border border-dashed border-[var(--line)] px-5 py-10 text-center">
+                <p className="text-[var(--muted)]">Your answer will appear here.</p>
               </div>
             )}
           </div>
 
           {response?.citations.length ? (
-            <div className="panel rounded-[1.8rem] p-6">
-              <p className="ui-mono text-xs uppercase tracking-[0.24em] text-[var(--accent)]">
-                Sources
-              </p>
-              <div className="mt-4 grid gap-4">
+            <div className="panel rounded-[1.6rem] p-6">
+              <p className="ui-mono text-xs uppercase tracking-[0.24em] text-[var(--accent)]">Sources</p>
+              <div className="mt-4 grid gap-3">
                 {response.citations.map((citation) => {
-                  const supportingChunk = response.retrieved_chunks.find(
-                    (chunk) => chunk.citation.chunk_id === citation.chunk_id,
+                  const chunk = response.retrieved_chunks.find(
+                    (c) => c.citation.chunk_id === citation.chunk_id,
                   );
-
                   return (
-                    <article key={citation.chunk_id} className="rounded-[1.5rem] bg-white/78 p-5">
-                      <div className="flex flex-wrap items-center justify-between gap-3">
+                    <article key={citation.chunk_id} className="rounded-[1.3rem] bg-white/78 p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
                         <div>
-                          <p className="ui-mono text-xs uppercase tracking-[0.18em] text-[var(--accent)]">
-                            {citation.marker} {citation.label}
+                          <h4 className="font-semibold">{citation.filename}</h4>
+                          <p className="text-xs text-[var(--muted)]">
+                            {citation.page_reference
+                              ? `Page ${citation.page_reference}`
+                              : `Section ${citation.chunk_index + 1}`}
                           </p>
-                          <h4 className="mt-2 text-lg font-semibold">{citation.filename}</h4>
                         </div>
-                        <div className="rounded-full bg-[rgba(28,85,107,0.1)] px-3 py-1 text-sm font-medium text-[var(--accent-cool)]">
-                          score {formatNumber(citation.score)}
-                        </div>
+                        <span className="rounded-full bg-[rgba(28,85,107,0.1)] px-2.5 py-1 text-xs font-semibold text-[var(--accent-cool)]">
+                          {Math.round(citation.score * 100)}% match
+                        </span>
                       </div>
-                      <p className="mt-3 text-sm text-[var(--muted)]">
-                        Chunk {citation.chunk_index}
-                        {citation.page_reference ? ` · page ${citation.page_reference}` : ""}
-                        {citation.start_char !== null && citation.end_char !== null
-                          ? ` · chars ${citation.start_char}-${citation.end_char}`
-                          : ""}
-                      </p>
-                      {supportingChunk ? (
-                        <p className="mt-4 rounded-[1.3rem] bg-[rgba(21,37,52,0.04)] px-4 py-4 text-sm leading-7 text-[var(--ink)]">
-                          {supportingChunk.text}
+                      {chunk ? (
+                        <p className="mt-3 rounded-xl bg-[rgba(21,37,52,0.04)] px-3 py-3 text-sm leading-7 text-[var(--ink)]">
+                          {chunk.text}
                         </p>
                       ) : null}
                     </article>
                   );
                 })}
-              </div>
-            </div>
-          ) : null}
-
-          {response?.retrieved_chunks.length ? (
-            <div className="panel rounded-[1.8rem] p-6">
-              <p className="ui-mono text-xs uppercase tracking-[0.24em] text-[var(--accent-cool)]">
-                Supporting text
-              </p>
-              <div className="mt-4 grid gap-4">
-                {response.retrieved_chunks.map((chunk) => (
-                  <article key={chunk.citation.chunk_id} className="rounded-[1.5rem] bg-white/78 p-5">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <h4 className="text-lg font-semibold">{chunk.citation.filename}</h4>
-                      <div className="rounded-full bg-[rgba(188,93,60,0.1)] px-3 py-1 text-sm font-medium text-[var(--accent-deep)]">
-                        relevance {formatNumber(chunk.score)}
-                      </div>
-                    </div>
-                    <p className="mt-4 text-sm leading-7 text-[var(--muted)]">{chunk.text}</p>
-                  </article>
-                ))}
               </div>
             </div>
           ) : null}
@@ -255,29 +193,12 @@ export default function AskPage() {
   );
 }
 
-function ConfidenceBadge({
-  confidence,
-}: {
-  confidence: "grounded" | "partial" | "insufficient_evidence";
-}) {
-  const styles = {
-    grounded: "bg-[rgba(29,107,76,0.12)] text-[var(--success)]",
-    partial: "bg-[rgba(138,97,25,0.12)] text-[var(--warning)]",
-    insufficient_evidence: "bg-[rgba(159,47,47,0.12)] text-[var(--danger)]",
+function ConfidenceBadge({ confidence }: { confidence: string }) {
+  const config: Record<string, { style: string; label: string }> = {
+    grounded: { style: "bg-[rgba(29,107,76,0.12)] text-[var(--success)]", label: "Fully supported" },
+    partial: { style: "bg-[rgba(138,97,25,0.12)] text-[var(--warning)]", label: "Partially supported" },
+    insufficient_evidence: { style: "bg-[rgba(159,47,47,0.12)] text-[var(--danger)]", label: "Not enough info" },
   };
-
-  return (
-    <span className={`rounded-full px-4 py-2 text-sm font-semibold capitalize ${styles[confidence]}`}>
-      {confidence.replaceAll("_", " ")}
-    </span>
-  );
-}
-
-function MetricCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-[1.4rem] bg-white/78 px-4 py-4">
-      <p className="ui-mono text-xs uppercase tracking-[0.18em] text-[var(--muted)]">{label}</p>
-      <p className="mt-2 text-sm font-medium text-[var(--ink)]">{value}</p>
-    </div>
-  );
+  const { style, label } = config[confidence] ?? config.partial;
+  return <span className={`rounded-full px-3 py-1.5 text-xs font-semibold ${style}`}>{label}</span>;
 }
