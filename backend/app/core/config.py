@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     chunk_min_length: int = 120
     answer_min_score: float = 0.2
     answer_max_citations: int = 2
+    query_rewrite_history_messages: int = 6
     backend_cors_origins: Annotated[list[str], NoDecode] = Field(
         default_factory=lambda: [
             "http://localhost:3000",

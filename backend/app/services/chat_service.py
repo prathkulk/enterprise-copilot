@@ -13,8 +13,9 @@ from backend.app.schemas.chat import (
     SessionAskRequest,
     SessionAskResponse,
 )
-from backend.app.services.ask import ask_question
+from backend.app.services.ask import run_ask_question
 from backend.app.services.collection_service import get_collection
+from backend.app.services.conversation_rewrite import rewrite_query_with_history
 
 
 class ChatSessionNotFoundError(Exception):
@@ -52,6 +53,7 @@ def ask_within_session(
     db: Session, session_id: int, payload: SessionAskRequest
 ) -> SessionAskResponse:
     session = _get_chat_session(db, session_id)
+    prior_messages = _list_session_message_models(db, session.id)
     effective_collection_id = payload.collection_id or session.collection_id
     try:
         ask_payload = AskRequest(
@@ -70,7 +72,16 @@ def ask_within_session(
     except ValidationError as exc:
         raise ValueError(str(exc)) from exc
 
-    ask_response = ask_question(payload=ask_payload, db=db)
+    rewrite_result = rewrite_query_with_history(
+        question=payload.question,
+        history=prior_messages,
+    )
+    ask_execution = run_ask_question(
+        payload=ask_payload,
+        db=db,
+        retrieval_question=rewrite_result.rewritten_question,
+    )
+    ask_response = ask_execution.response
     user_message = ChatMessage(
         session_id=session.id,
         role="user",
@@ -95,6 +106,10 @@ def ask_within_session(
             "collection_name_contains": ask_payload.collection_name_contains,
             "collection_description_contains": ask_payload.collection_description_contains,
             "top_k": ask_payload.top_k,
+            "rewritten_question": ask_execution.retrieval_question,
+            "rewrite_applied": rewrite_result.rewrite_applied,
+            "rewrite_prompt_version": rewrite_result.prompt_version,
+            "rewrite_history_messages_used": rewrite_result.history_messages_used,
         },
     )
     assistant_message = ChatMessage(
@@ -110,6 +125,10 @@ def ask_within_session(
             "prompt_version": ask_response.prompt_version,
             "latency_ms": ask_response.latency_ms.model_dump(),
             "providers": ask_response.providers.model_dump(),
+            "rewritten_question": ask_execution.retrieval_question,
+            "rewrite_applied": rewrite_result.rewrite_applied,
+            "rewrite_prompt_version": rewrite_result.prompt_version,
+            "rewrite_history_messages_used": rewrite_result.history_messages_used,
             "retrieved_chunks": [
                 chunk.model_dump() for chunk in ask_response.retrieved_chunks
             ],
@@ -125,6 +144,10 @@ def ask_within_session(
         session_id=session.id,
         user_message_id=user_message.id,
         assistant_message_id=assistant_message.id,
+        rewritten_question=ask_execution.retrieval_question,
+        rewrite_applied=rewrite_result.rewrite_applied,
+        rewrite_prompt_version=rewrite_result.prompt_version,
+        rewrite_history_messages_used=rewrite_result.history_messages_used,
         **ask_response.model_dump(),
     )
 
@@ -134,6 +157,15 @@ def _get_chat_session(db: Session, session_id: int) -> ChatSession:
     if session is None:
         raise ChatSessionNotFoundError
     return session
+
+
+def _list_session_message_models(db: Session, session_id: int) -> list[ChatMessage]:
+    statement = (
+        select(ChatMessage)
+        .where(ChatMessage.session_id == session_id)
+        .order_by(ChatMessage.created_at.asc(), ChatMessage.id.asc())
+    )
+    return list(db.scalars(statement))
 
 
 def _serialize_session(session: ChatSession) -> ChatSessionResponse:

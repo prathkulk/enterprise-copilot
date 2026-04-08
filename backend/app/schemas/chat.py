@@ -53,3 +53,7 @@ class SessionAskResponse(AskResponse):
     session_id: int
     user_message_id: int
     assistant_message_id: int
+    rewritten_question: str
+    rewrite_applied: bool
+    rewrite_prompt_version: str
+    rewrite_history_messages_used: int

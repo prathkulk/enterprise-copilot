@@ -28,6 +28,7 @@ This initial commit sets up:
 - retrieval narrowing by document, tags, source type, upload date, and collection metadata
 - background ingestion jobs with polling
 - chat sessions with persisted multi-turn message history
+- conversation-aware session retrieval with follow-up query rewriting
 
 ## Project structure
 
@@ -59,7 +60,8 @@ This initial commit sets up:
 │   │   │   └── ingestion_job.py
 │   │   ├── prompts
 │   │   │   ├── __init__.py
-│   │   │   └── grounded_answer.py
+│   │   │   ├── grounded_answer.py
+│   │   │   └── query_rewrite.py
 │   │   ├── schemas
 │   │   │   ├── ask.py
 │   │   │   ├── answers.py
@@ -74,6 +76,7 @@ This initial commit sets up:
 │   │   │   ├── chat_service.py
 │   │   │   ├── chunking.py
 │   │   │   ├── collection_service.py
+│   │   │   ├── conversation_rewrite.py
 │   │   │   ├── document_parsers.py
 │   │   │   ├── document_service.py
 │   │   │   ├── embeddings.py
@@ -175,7 +178,7 @@ docker compose down
 - `GET /jobs/{job_id}` polls ingestion job status and progress.
 - `POST /sessions` creates a persistent chat session, optionally scoped to a default collection.
 - `GET /sessions/{session_id}/messages` returns ordered user and assistant turns with citations and timestamps.
-- `POST /sessions/{session_id}/ask` runs grounded Q&A within a session and stores the turn history.
+- `POST /sessions/{session_id}/ask` runs grounded Q&A within a session, rewrites follow-up questions into standalone retrieval queries, and stores the turn history.
 - `POST /retrieve` embeds a question and returns top-k semantic chunk matches.
 - `POST /answer` retrieves supporting chunks and returns a grounded answer with inline citations.
 - `POST /ask` runs the full query embedding, retrieval, and grounded answer flow in one call.
@@ -246,6 +249,7 @@ Document statuses currently move through `uploaded`, `processing`, `indexed`, an
 If you change embedding models or dimensions, existing stored embeddings are cleared and affected documents are marked `uploaded` so they can be re-ingested.
 Ingestion jobs currently move through `pending`, `processing`, `indexed`, and `failed`.
 Session asks persist both the user question and assistant answer so multi-turn history can be retrieved later from `/sessions/{session_id}/messages`.
+Session follow-up questions now use recent session turns to generate a standalone retrieval query before semantic search runs.
 
 ## Vector verification
 

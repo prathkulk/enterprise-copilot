@@ -1,4 +1,5 @@
 from time import perf_counter
+from typing import NamedTuple
 
 from sqlalchemy.orm import Session
 
@@ -15,11 +16,24 @@ from backend.app.services.embeddings import get_embedding_provider
 from backend.app.services.retrieval import retrieve_chunks
 
 
+class AskExecutionResult(NamedTuple):
+    response: AskResponse
+    retrieval_question: str
+
+
 def ask_question(payload: AskRequest, db: Session) -> AskResponse:
+    return run_ask_question(payload=payload, db=db).response
+
+
+def run_ask_question(
+    payload: AskRequest, db: Session, retrieval_question: str | None = None
+) -> AskExecutionResult:
     embedding_provider = get_embedding_provider()
     llm_provider = get_llm_provider()
     total_started_at = perf_counter()
-    retrieval_request = RetrievalRequest.model_validate(payload.model_dump())
+    retrieval_request_payload = payload.model_dump()
+    retrieval_request_payload["question"] = retrieval_question or payload.question
+    retrieval_request = RetrievalRequest.model_validate(retrieval_request_payload)
 
     retrieval_started_at = perf_counter()
     retrieval_response = retrieve_chunks(db=db, payload=retrieval_request)
@@ -33,8 +47,8 @@ def ask_question(payload: AskRequest, db: Session) -> AskResponse:
     answer_duration_ms = round((perf_counter() - answer_started_at) * 1000, 3)
     total_duration_ms = round((perf_counter() - total_started_at) * 1000, 3)
 
-    return AskResponse(
-        question=retrieval_request.question,
+    response = AskResponse(
+        question=payload.question,
         collection_id=retrieval_request.collection_id,
         document_id=retrieval_request.document_id,
         document_ids=retrieval_request.document_ids,
@@ -60,4 +74,8 @@ def ask_question(payload: AskRequest, db: Session) -> AskResponse:
             llm_provider=llm_provider.provider_name,
             llm_model=llm_provider.model_name,
         ),
+    )
+    return AskExecutionResult(
+        response=response,
+        retrieval_question=retrieval_request.question,
     )
