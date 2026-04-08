@@ -105,6 +105,52 @@ def format_answer(sections: list[str], citations: list[AnswerCitation]) -> str:
     return " ".join(formatted_sections).strip()
 
 
+def generate_answer_from_chunks(
+    *,
+    question: str,
+    retrieved_chunks: list[RetrievedChunk],
+) -> AnswerResponse:
+    supporting_chunks = select_supporting_chunks(
+        question=question,
+        retrieved_chunks=retrieved_chunks,
+    )
+
+    if not supporting_chunks:
+        return AnswerResponse(
+            question=question,
+            answer=INSUFFICIENT_EVIDENCE_ANSWER,
+            confidence="insufficient_evidence",
+            insufficient_evidence=True,
+            citations=[],
+        )
+
+    prompt = build_answer_prompt(question, supporting_chunks)
+    sections = llm_provider.generate_answer_sections(
+        prompt=prompt,
+        question=question,
+        chunks=supporting_chunks,
+    )
+    citations = render_citations(supporting_chunks)
+    formatted_answer = format_answer(sections, citations)
+
+    if not formatted_answer:
+        return AnswerResponse(
+            question=question,
+            answer=INSUFFICIENT_EVIDENCE_ANSWER,
+            confidence="insufficient_evidence",
+            insufficient_evidence=True,
+            citations=[],
+        )
+
+    return AnswerResponse(
+        question=question,
+        answer=formatted_answer,
+        confidence="grounded",
+        insufficient_evidence=False,
+        citations=citations,
+    )
+
+
 def generate_answer(payload: AnswerRequest, db: Session) -> AnswerResponse:
     retrieval_response = retrieve_chunks(
         db=db,
@@ -115,42 +161,7 @@ def generate_answer(payload: AnswerRequest, db: Session) -> AnswerResponse:
             top_k=payload.top_k,
         ),
     )
-    supporting_chunks = select_supporting_chunks(
+    return generate_answer_from_chunks(
         question=payload.question,
         retrieved_chunks=retrieval_response.results,
-    )
-
-    if not supporting_chunks:
-        return AnswerResponse(
-            question=payload.question,
-            answer=INSUFFICIENT_EVIDENCE_ANSWER,
-            confidence="insufficient_evidence",
-            insufficient_evidence=True,
-            citations=[],
-        )
-
-    prompt = build_answer_prompt(payload.question, supporting_chunks)
-    sections = llm_provider.generate_answer_sections(
-        prompt=prompt,
-        question=payload.question,
-        chunks=supporting_chunks,
-    )
-    citations = render_citations(supporting_chunks)
-    formatted_answer = format_answer(sections, citations)
-
-    if not formatted_answer:
-        return AnswerResponse(
-            question=payload.question,
-            answer=INSUFFICIENT_EVIDENCE_ANSWER,
-            confidence="insufficient_evidence",
-            insufficient_evidence=True,
-            citations=[],
-        )
-
-    return AnswerResponse(
-        question=payload.question,
-        answer=formatted_answer,
-        confidence="grounded",
-        insufficient_evidence=False,
-        citations=citations,
     )

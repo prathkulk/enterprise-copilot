@@ -23,6 +23,7 @@ This initial commit sets up:
 - end-to-end ingestion pipeline for extract, chunk, and embed
 - top-k semantic retrieval service with collection/document filters
 - grounded answer generation with citation formatting and insufficient-evidence fallback
+- single-call `/ask` endpoint for full retrieval and grounded answer flow
 
 ## Project structure
 
@@ -49,11 +50,13 @@ This initial commit sets up:
 │   │   │   ├── document_chunk.py
 │   │   │   └── ingestion_job.py
 │   │   ├── schemas
+│   │   │   ├── ask.py
 │   │   │   ├── answers.py
 │   │   │   ├── collections.py
 │   │   │   ├── documents.py
 │   │   │   └── retrieval.py
 │   │   ├── services
+│   │   │   ├── ask.py
 │   │   │   ├── answer_generation.py
 │   │   │   ├── chunking.py
 │   │   │   ├── collection_service.py
@@ -157,6 +160,7 @@ docker compose down
 - `POST /documents/{document_id}/ingest` runs extraction, chunking, embedding, and indexing in one step.
 - `POST /retrieve` embeds a question and returns top-k semantic chunk matches.
 - `POST /answer` retrieves supporting chunks and returns a grounded answer with inline citations.
+- `POST /ask` runs the full query embedding, retrieval, and grounded answer flow in one call.
 - `POST /debug/vector-search/embeddings` returns deterministic mock embeddings for debug verification.
 - `POST /debug/vector-search/seed` inserts mock chunk rows with fake embeddings.
 - `POST /debug/vector-search/query` runs a temporary top-k similarity search.
@@ -313,6 +317,24 @@ Expected behavior:
 - the answer is grounded in retrieved chunk text
 - inline citations such as `[1]` map to real chunk and document references
 - irrelevant questions return an insufficient-evidence response
+
+## Ask Verification
+
+After indexing a document, call:
+
+```bash
+curl -X POST http://127.0.0.1:8000/ask \
+  -H "Content-Type: application/json" \
+  -d '{"question":"How should finance teams forecast quarterly cash flow?","collection_id":1,"top_k":3}'
+```
+
+The response returns:
+
+- `answer`
+- `citations`
+- `retrieved_chunks`
+- latency fields under `latency_ms`
+- provider metadata under `providers`
 
 ## Quick test
 
