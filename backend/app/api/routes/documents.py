@@ -1,4 +1,13 @@
-from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    HTTPException,
+    Response,
+    UploadFile,
+    status,
+)
 from sqlalchemy.orm import Session
 
 from backend.app.db.session import get_db_session
@@ -6,10 +15,10 @@ from backend.app.schemas.documents import (
     DocumentChunkingResponse,
     DocumentDetailResponse,
     DocumentExtractionResponse,
-    DocumentIngestionResponse,
     DocumentListItem,
     DocumentUploadResponse,
 )
+from backend.app.schemas.jobs import IngestionJobQueuedResponse
 from backend.app.services.chunking import chunk_document as chunk_document_record
 from backend.app.services.collection_service import CollectionNotFoundError
 from backend.app.services.document_service import (
@@ -21,7 +30,11 @@ from backend.app.services.document_service import (
     upload_document as upload_document_record,
 )
 from backend.app.services.embeddings import EmbeddingProviderError
-from backend.app.services.ingestion import ingest_document as ingest_document_record
+from backend.app.services.ingestion import (
+    IngestionAlreadyRunningError,
+    queue_ingestion_job as queue_ingestion_job_record,
+    run_ingestion_job,
+)
 from backend.app.services.text_extraction import (
     DocumentExtractionNotAvailableError,
     extract_document_text as extract_document_text_record,
@@ -128,15 +141,27 @@ def chunk_document(document_id: int, db: Session = Depends(get_db_session)):
 
 @router.post(
     "/documents/{document_id}/ingest",
-    response_model=DocumentIngestionResponse,
+    response_model=IngestionJobQueuedResponse,
+    status_code=status.HTTP_202_ACCEPTED,
 )
-def ingest_document(document_id: int, db: Session = Depends(get_db_session)):
+def ingest_document(
+    document_id: int,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db_session),
+):
     try:
-        return ingest_document_record(db=db, document_id=document_id)
+        job = queue_ingestion_job_record(db=db, document_id=document_id)
+        background_tasks.add_task(run_ingestion_job, job.id)
+        return job
     except DocumentNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Document not found",
+        ) from exc
+    except IngestionAlreadyRunningError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="An ingestion job is already running for this document",
         ) from exc
     except EmbeddingProviderError as exc:
         raise HTTPException(

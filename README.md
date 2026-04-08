@@ -26,6 +26,7 @@ This initial commit sets up:
 - single-call `/ask` endpoint for full retrieval and grounded answer flow
 - versioned grounded-answer prompt templates and guardrails
 - retrieval narrowing by document, tags, source type, upload date, and collection metadata
+- background ingestion jobs with polling
 
 ## Project structure
 
@@ -37,6 +38,7 @@ This initial commit sets up:
 │   │   │   ├── routes
 │   │   │   │   ├── collections.py
 │   │   │   │   ├── documents.py
+│   │   │   │   ├── jobs.py
 │   │   │   │   ├── retrieval.py
 │   │   │   │   ├── system.py
 │   │   │   │   └── vector_debug.py
@@ -59,6 +61,7 @@ This initial commit sets up:
 │   │   │   ├── answers.py
 │   │   │   ├── collections.py
 │   │   │   ├── documents.py
+│   │   │   ├── jobs.py
 │   │   │   └── retrieval.py
 │   │   ├── services
 │   │   │   ├── ask.py
@@ -162,7 +165,8 @@ docker compose down
 - `DELETE /documents/{document_id}` removes a document and its stored file copy.
 - `POST /documents/{document_id}/extract` runs temporary raw-text extraction for an uploaded document.
 - `POST /documents/{document_id}/chunk` runs temporary chunk generation and stores chunk rows.
-- `POST /documents/{document_id}/ingest` runs extraction, chunking, embedding, and indexing in one step.
+- `POST /documents/{document_id}/ingest` queues non-blocking extraction, chunking, embedding, and indexing.
+- `GET /jobs/{job_id}` polls ingestion job status and progress.
 - `POST /retrieve` embeds a question and returns top-k semantic chunk matches.
 - `POST /answer` retrieves supporting chunks and returns a grounded answer with inline citations.
 - `POST /ask` runs the full query embedding, retrieval, and grounded answer flow in one call.
@@ -229,6 +233,7 @@ Embedding generation is provider-driven via config and now defaults to `openai` 
 Answer generation is provider-driven via config and now defaults to `openai` with `gpt-5.4-mini`.
 Document statuses currently move through `uploaded`, `processing`, `indexed`, and `failed`.
 If you change embedding models or dimensions, existing stored embeddings are cleared and affected documents are marked `uploaded` so they can be re-ingested.
+Ingestion jobs currently move through `pending`, `processing`, `indexed`, and `failed`.
 
 ## Vector verification
 
@@ -303,11 +308,11 @@ curl -X POST http://127.0.0.1:8000/documents/{document_id}/ingest
 
 Expected behavior:
 
-- document status starts as `uploaded`
-- ingestion sets status to `processing`
+- the ingest trigger returns immediately with a job id
+- polling `GET /jobs/{job_id}` shows `pending` or `processing`
 - chunk rows are created
 - embeddings are saved on chunks
-- final document status becomes `indexed`
+- final job status becomes `indexed`
 
 ## Retrieval Verification
 
@@ -372,6 +377,26 @@ The response returns:
 - `retrieved_chunks`
 - latency fields under `latency_ms`
 - provider metadata under `providers`
+
+## Ingestion Job Verification
+
+After uploading a document, trigger ingestion:
+
+```bash
+curl -X POST http://127.0.0.1:8000/documents/{document_id}/ingest
+```
+
+Then poll the job:
+
+```bash
+curl http://127.0.0.1:8000/jobs/{job_id}
+```
+
+Expected behavior:
+
+- the status updates until completion
+- `document_status` tracks the ingestion lifecycle
+- `chunk_count` and `embedding_count` reflect completed indexing work
 
 ## Quick test
 
