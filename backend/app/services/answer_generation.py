@@ -47,6 +47,21 @@ QUESTION_STOPWORDS = {
     "which",
     "who",
 }
+PARTIAL_ANSWER_STOPWORDS = QUESTION_STOPWORDS.union(
+    {
+        "candidate",
+        "candidates",
+        "document",
+        "documents",
+        "experience",
+        "highlight",
+        "highlights",
+        "resume",
+        "resumes",
+        "role",
+        "roles",
+    }
+)
 
 
 def _tokenize(text: str) -> set[str]:
@@ -70,23 +85,22 @@ def _render_page_reference(page_reference: int | list[int] | None) -> str | None
     return f"page {page_reference}"
 
 
-def _supports_question(question_tokens: set[str], chunk: RetrievedChunk) -> bool:
-    chunk_tokens = _tokenize(chunk.text)
-    overlap = question_tokens.intersection(chunk_tokens)
-    return chunk.score >= settings.answer_min_score and len(overlap) >= 2
-
-
 def select_supporting_chunks(
     *,
     question: str,
     retrieved_chunks: list[RetrievedChunk],
 ) -> list[RetrievedChunk]:
     question_tokens = _significant_question_tokens(question)
-    return [
-        chunk
-        for chunk in retrieved_chunks
-        if _supports_question(question_tokens, chunk)
-    ][: settings.answer_max_citations]
+    ranked_chunks = sorted(
+        retrieved_chunks,
+        key=lambda chunk: (
+            chunk.score >= settings.answer_min_score,
+            len(question_tokens.intersection(_tokenize(chunk.text))),
+            chunk.score,
+        ),
+        reverse=True,
+    )
+    return ranked_chunks[: settings.answer_max_citations]
 
 
 def render_citations(chunks: list[RetrievedChunk]) -> list[AnswerCitation]:
@@ -119,36 +133,61 @@ def format_answer(answer: str, citations: list[AnswerCitation]) -> str:
     return f"{answer.strip()} {markers}".strip()
 
 
-def _append_missing_information(answer: str, missing_information: list[str]) -> str:
-    if not missing_information:
-        return answer.strip()
-    suffix = " ".join(missing_information)
-    return f"{answer.strip()} {suffix}".strip()
+def _clean_missing_information(items: list[str]) -> list[str]:
+    cleaned: list[str] = []
+    seen: set[str] = set()
+
+    for item in items:
+        normalized = " ".join(item.strip().split())
+        if not normalized:
+            continue
+
+        normalized = normalized.rstrip(".")
+        if len(normalized.split()) < 2:
+            continue
+
+        if not normalized.endswith("?"):
+            normalized = f"{normalized}."
+
+        dedupe_key = normalized.lower()
+        if dedupe_key in seen:
+            continue
+
+        seen.add(dedupe_key)
+        cleaned.append(normalized)
+
+    return cleaned
 
 
-def _derive_missing_information(
-    *, question: str, supporting_chunks: list[RetrievedChunk]
-) -> list[str]:
-    question_tokens = _significant_question_tokens(question)
-    supported_tokens = set()
-    for chunk in supporting_chunks:
-        supported_tokens.update(_tokenize(chunk.text))
-
-    missing_tokens = sorted(question_tokens - supported_tokens)
-    if not missing_tokens:
-        return []
-
-    return [
-        "The indexed documents do not specify details about: "
-        + ", ".join(missing_tokens[:5])
-        + "."
+def _focus_phrase(question: str) -> str | None:
+    focus_tokens = [
+        token
+        for token in re.findall(r"[a-z0-9]+", question.lower())
+        if len(token) > 2 and token not in PARTIAL_ANSWER_STOPWORDS
     ]
+    if not focus_tokens:
+        return None
+    return " ".join(focus_tokens[:2])
 
 
-def _fallback_supported_answer(supporting_chunks: list[RetrievedChunk]) -> str:
-    if not supporting_chunks:
-        return INSUFFICIENT_EVIDENCE_ANSWER
-    return supporting_chunks[0].text.strip()
+def _fallback_supported_answer(question: str) -> str:
+    focus_phrase = _focus_phrase(question)
+    if focus_phrase is None:
+        return (
+            "The cited sections provide some related background, but not enough direct "
+            "evidence to answer this confidently."
+        )
+
+    if "security" in focus_phrase:
+        return (
+            f"The cited sections do not show explicit {focus_phrase}-specific evidence. "
+            "They point more to adjacent technical experience than dedicated security roles."
+        )
+
+    return (
+        "The cited sections provide some related background, "
+        f"but not enough direct evidence to answer the part about {focus_phrase} confidently."
+    )
 
 
 def generate_answer_from_chunks(
@@ -182,23 +221,19 @@ def generate_answer_from_chunks(
         chunks=supporting_chunks,
     )
     citations = render_citations(supporting_chunks)
-    fallback_missing_information = _derive_missing_information(
-        question=question,
-        supporting_chunks=supporting_chunks,
-    )
+    missing_information = _clean_missing_information(draft.missing_information)
 
     if draft.insufficient_evidence or not draft.answer.strip():
-        if fallback_missing_information:
-            guarded_answer = _append_missing_information(
-                _fallback_supported_answer(supporting_chunks),
-                fallback_missing_information,
-            )
+        if supporting_chunks:
             return AnswerResponse(
                 question=question,
-                answer=format_answer(guarded_answer, citations),
+                answer=format_answer(
+                    _fallback_supported_answer(question),
+                    citations,
+                ),
                 confidence="partial",
                 insufficient_evidence=False,
-                missing_information=fallback_missing_information,
+                missing_information=missing_information,
                 answer_mode=prompt_bundle.mode,
                 prompt_version=prompt_bundle.version,
                 citations=citations,
@@ -215,10 +250,8 @@ def generate_answer_from_chunks(
             citations=[],
         )
 
-    missing_information = draft.missing_information or fallback_missing_information
     confidence = "partial" if missing_information else "grounded"
-    guarded_answer = _append_missing_information(draft.answer, missing_information)
-    formatted_answer = format_answer(guarded_answer, citations)
+    formatted_answer = format_answer(draft.answer, citations)
 
     if not formatted_answer:
         return AnswerResponse(

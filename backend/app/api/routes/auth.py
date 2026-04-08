@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
 from backend.app.db.session import get_db_session
@@ -14,7 +14,12 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.post("/register", response_model=AuthTokenResponse, status_code=status.HTTP_201_CREATED)
-def register(payload: AuthRegisterRequest, db: Session = Depends(get_db_session)):
+def register(
+    payload: AuthRegisterRequest,
+    response: Response,
+    db: Session = Depends(get_db_session),
+):
+    response.headers["Cache-Control"] = "no-store"
     try:
         return register_user(db=db, payload=payload)
     except AuthConflictError as exc:
@@ -25,7 +30,12 @@ def register(payload: AuthRegisterRequest, db: Session = Depends(get_db_session)
 
 
 @router.post("/login", response_model=AuthTokenResponse)
-def login(payload: AuthLoginRequest, db: Session = Depends(get_db_session)):
+def login(
+    payload: AuthLoginRequest,
+    response: Response,
+    db: Session = Depends(get_db_session),
+):
+    response.headers["Cache-Control"] = "no-store"
     try:
         return authenticate_user(db=db, payload=payload)
     except AuthenticationError as exc:

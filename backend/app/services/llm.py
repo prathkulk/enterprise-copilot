@@ -117,11 +117,11 @@ class MockLLMProvider(LLMProvider):
         missing_tokens = sorted(
             token
             for token in question_tokens
-            if token not in covered_tokens and len(token) > 3
+            if token not in covered_tokens and len(token) > 4
         )
         missing_information = (
-            [f"The indexed documents do not specify details about: {', '.join(missing_tokens[:5])}."]
-            if sections and missing_tokens
+            [f"The documents do not cover {', '.join(missing_tokens[:3])} in enough detail."]
+            if sections and len(missing_tokens) >= 2
             else []
         )
 

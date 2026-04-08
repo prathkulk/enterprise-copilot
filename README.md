@@ -32,6 +32,7 @@ This initial commit sets up:
 - answer feedback capture for relevance signals
 - structured logging and request-level observability for ingestion and ask flows
 - local JWT authentication with tenant-scoped data access
+- Next.js and Tailwind frontend for collection, upload, document, and ask workflows
 
 ## Project structure
 
@@ -99,6 +100,24 @@ This initial commit sets up:
 │   │   └── main.py
 │   ├── Dockerfile
 │   └── requirements.txt
+├── frontend
+│   ├── app
+│   │   ├── collections
+│   │   ├── globals.css
+│   │   ├── layout.tsx
+│   │   └── page.tsx
+│   ├── components
+│   │   ├── auth-provider.tsx
+│   │   ├── collection-switcher.tsx
+│   │   ├── dashboard-shell.tsx
+│   │   └── status-pill.tsx
+│   ├── lib
+│   │   ├── api.ts
+│   │   ├── format.ts
+│   │   └── types.ts
+│   ├── Dockerfile
+│   ├── package-lock.json
+│   └── package.json
 ├── .dockerignore
 ├── docker-compose.yml
 ├── .env.example
@@ -129,12 +148,21 @@ This initial commit sets up:
    EMBEDDING_MODEL=text-embedding-3-small
    LLM_PROVIDER=openai
    LLM_MODEL=gpt-5.4-mini
+   BACKEND_INTERNAL_URL=http://127.0.0.1:8000
    ```
 
 4. Start the API:
 
    ```bash
    uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8000
+   ```
+
+5. Start the frontend:
+
+   ```bash
+   cd frontend
+   npm install
+   npm run dev
    ```
 
 ## Docker setup
@@ -147,18 +175,24 @@ This initial commit sets up:
    docker compose up --build
    ```
 
-3. Visit the running API:
+3. Visit the running app:
 
    ```text
    http://127.0.0.1:8000/health
    http://127.0.0.1:8000/version
    http://127.0.0.1:8000/docs
+   http://127.0.0.1:3000
    ```
 
 The compose stack includes:
 
+- `frontend` running Next.js with Tailwind for the upload and ask demo UI
 - `backend` running FastAPI with source mounted for live local development
 - `postgres` running PostgreSQL 16 with a persistent named volume
+
+The frontend uses same-origin Next.js route handlers for auth and API proxying. The browser only
+receives a safe session payload, while the bearer token stays in `httpOnly` cookies and is attached
+server-side when proxying requests to the FastAPI backend.
 
 On startup, the API creates the current SQLAlchemy tables automatically for local development.
 It also enables the `vector` extension and ensures the `document_chunks.embedding` column exists.
@@ -204,6 +238,20 @@ All endpoints other than `/health`, `/version`, `/docs`, `/auth/register`, and `
 require `Authorization: Bearer <token>`. Data access is tenant-scoped, so collections,
 documents, retrieval, jobs, chat sessions, and debug vector queries only operate on the
 authenticated user's tenant data.
+
+Frontend pages now cover the demo path end to end:
+
+- `/` for register and login
+- `/collections` for collection creation and navigation
+- `/collections/{id}/upload` for file upload
+- `/collections/{id}/documents` for ingestion and document status
+- `/collections/{id}/ask` for grounded answers with citations and retrieved chunks
+
+Frontend auth is intentionally server-mediated:
+
+- the browser does not store the bearer token in `localStorage`
+- auth routes set `httpOnly` cookies
+- authenticated frontend requests are proxied through `/api/backend/*`
 
 Grounded answering now uses a centralized versioned prompt template with these guardrails:
 
@@ -284,6 +332,7 @@ Session follow-up questions now use recent session turns to generate a standalon
 Answer feedback can now be attached to assistant messages for later relevance evaluation and ranking improvements.
 Request logging now emits structured JSON with `request_id`, request timing, ingestion stage durations, ask latency fields, `top_k`, `collection_id`, and token/cost placeholders for future provider accounting.
 Collections, chat sessions, retrieval, and document access are now tenant-scoped so one tenant cannot access another tenant's indexed data through the API.
+The frontend stores the bearer token in browser storage and uses it for collection, upload, ingestion, and ask requests.
 
 ## Vector verification
 

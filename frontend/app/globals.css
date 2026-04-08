@@ -1,0 +1,156 @@
+@import "tailwindcss";
+
+:root {
+  --canvas: #f2ebdf;
+  --canvas-strong: #e8dcc7;
+  --panel: rgba(255, 250, 240, 0.78);
+  --panel-strong: rgba(255, 255, 255, 0.92);
+  --ink: #152534;
+  --muted: #5d6a76;
+  --accent: #bc5d3c;
+  --accent-deep: #8f4127;
+  --accent-cool: #1c556b;
+  --line: rgba(21, 37, 52, 0.1);
+  --success: #1d6b4c;
+  --warning: #8a6119;
+  --danger: #9f2f2f;
+  --shadow: 0 24px 60px rgba(33, 40, 48, 0.12);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at top left, rgba(188, 93, 60, 0.18), transparent 26%),
+    radial-gradient(circle at top right, rgba(28, 85, 107, 0.14), transparent 24%),
+    linear-gradient(180deg, var(--canvas) 0%, #f7f3ec 48%, #efe5d7 100%);
+  font-family:
+    "Iowan Old Style",
+    "Palatino Linotype",
+    "Book Antiqua",
+    Georgia,
+    serif;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+::selection {
+  background: rgba(188, 93, 60, 0.22);
+}
+
+.ui-mono {
+  font-family:
+    "IBM Plex Mono",
+    "SFMono-Regular",
+    "SF Mono",
+    "Liberation Mono",
+    ui-monospace,
+    monospace;
+}
+
+.panel {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  backdrop-filter: blur(18px);
+  box-shadow: var(--shadow);
+}
+
+.panel-strong {
+  border: 1px solid rgba(21, 37, 52, 0.08);
+  background: var(--panel-strong);
+  box-shadow: 0 18px 45px rgba(33, 40, 48, 0.1);
+}
+
+.field {
+  width: 100%;
+  border-radius: 1rem;
+  border: 1px solid rgba(21, 37, 52, 0.12);
+  background: rgba(255, 255, 255, 0.92);
+  padding: 0.95rem 1rem;
+  color: var(--ink);
+  outline: none;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.field:focus {
+  border-color: rgba(188, 93, 60, 0.56);
+  box-shadow: 0 0 0 4px rgba(188, 93, 60, 0.12);
+}
+
+.button-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 999px;
+  border: 0;
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-deep) 100%);
+  padding: 0.9rem 1.2rem;
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease,
+    opacity 160ms ease;
+  box-shadow: 0 16px 30px rgba(143, 65, 39, 0.22);
+}
+
+.button-primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.button-primary:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.button-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 999px;
+  border: 1px solid rgba(21, 37, 52, 0.12);
+  background: rgba(255, 255, 255, 0.8);
+  padding: 0.9rem 1.2rem;
+  color: var(--ink);
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    transform 160ms ease,
+    background 160ms ease,
+    opacity 160ms ease;
+}
+
+.button-secondary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  background: rgba(255, 255, 255, 0.96);
+}
+
+.button-secondary:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}

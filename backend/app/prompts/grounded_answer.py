@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 from backend.app.schemas.retrieval import RetrievedChunk
 
-GROUNDED_ANSWER_PROMPT_VERSION = "grounded-answer-v1"
+GROUNDED_ANSWER_PROMPT_VERSION = "grounded-answer-v2"
 GROUNDED_ANSWER_MODE = "structured_json"
 
 
@@ -50,11 +50,13 @@ def build_grounded_answer_prompt(payload: GroundedAnswerPrompt) -> GroundedAnswe
         "Rules:\n"
         "1. Answer only from the provided context.\n"
         "2. If the context does not support a claim, do not infer or fabricate it.\n"
-        "3. If the question is only partially answerable, answer the supported portion and list the missing information.\n"
+        "3. If the question is only partially answerable, answer the supported portion and list the missing information separately.\n"
         "4. If the question is not answerable from context, set insufficient_evidence=true.\n"
         "5. Use a concise, professional enterprise tone.\n"
         "6. Do not include citation markers like [1] in the answer text.\n"
-        "7. Return valid JSON only.\n\n"
+        "7. Do not mention missing_information inside the answer field.\n"
+        "8. Keep missing_information useful, specific, and short. Avoid single-word fragments.\n"
+        "9. Return valid JSON only.\n\n"
         "Return this JSON schema:\n"
         "{\n"
         '  "answer": "string",\n'
