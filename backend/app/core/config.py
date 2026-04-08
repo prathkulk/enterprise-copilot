@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     database_url: str | None = None
     embedding_dimensions: int = 8
     local_storage_root: str = "data/uploads"
+    chunk_size: int = 800
+    chunk_overlap: int = 150
+    chunk_min_length: int = 120
     backend_cors_origins: Annotated[list[str], NoDecode] = Field(
         default_factory=lambda: [
             "http://localhost:3000",

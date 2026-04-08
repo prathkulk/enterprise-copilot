@@ -3,11 +3,13 @@ from sqlalchemy.orm import Session
 
 from backend.app.db.session import get_db_session
 from backend.app.schemas.documents import (
+    DocumentChunkingResponse,
     DocumentDetailResponse,
     DocumentExtractionResponse,
     DocumentListItem,
     DocumentUploadResponse,
 )
+from backend.app.services.chunking import chunk_document as chunk_document_record
 from backend.app.services.collection_service import CollectionNotFoundError
 from backend.app.services.document_service import (
     DocumentNotFoundError,
@@ -104,4 +106,18 @@ def extract_document_text(document_id: int, db: Session = Depends(get_db_session
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(exc),
+        ) from exc
+
+
+@router.post(
+    "/documents/{document_id}/chunk",
+    response_model=DocumentChunkingResponse,
+)
+def chunk_document(document_id: int, db: Session = Depends(get_db_session)):
+    try:
+        return chunk_document_record(db=db, document_id=document_id)
+    except DocumentNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found",
         ) from exc

@@ -44,3 +44,19 @@ class DocumentExtractionResponse(BaseModel):
     source_type: str
     extracted_text: str
     parser_metadata: dict[str, Any]
+
+
+class DocumentChunkResponse(BaseModel):
+    chunk_index: int
+    text: str
+    metadata_json: dict[str, Any]
+
+
+class DocumentChunkingResponse(BaseModel):
+    document_id: int
+    filename: str
+    chunk_count: int
+    chunk_size: int
+    chunk_overlap: int
+    chunk_min_length: int
+    chunks: list[DocumentChunkResponse]

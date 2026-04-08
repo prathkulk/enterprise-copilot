@@ -18,6 +18,7 @@ This initial commit sets up:
 - document upload endpoint with local filesystem storage
 - document list, detail, and delete APIs
 - text extraction pipeline for TXT, PDF, and DOCX
+- semantic chunking pipeline with configurable overlap
 
 ## Project structure
 
@@ -43,6 +44,7 @@ This initial commit sets up:
 │   │   │   ├── document_chunk.py
 │   │   │   └── ingestion_job.py
 │   │   ├── services
+│   │   │   ├── chunking.py
 │   │   │   ├── collection_service.py
 │   │   │   ├── document_parsers.py
 │   │   │   ├── document_service.py
@@ -136,6 +138,7 @@ docker compose down
 - `GET /documents/{document_id}` fetches a single document with collection and ingestion details.
 - `DELETE /documents/{document_id}` removes a document and its stored file copy.
 - `POST /documents/{document_id}/extract` runs temporary raw-text extraction for an uploaded document.
+- `POST /documents/{document_id}/chunk` runs temporary chunk generation and stores chunk rows.
 - `POST /debug/vector-search/seed` inserts mock chunk rows with fake embeddings.
 - `POST /debug/vector-search/query` runs a temporary top-k similarity search.
 
@@ -176,6 +179,7 @@ The backend currently creates these relational tables:
 - `ingestion_jobs`
 
 `document_chunks.embedding` is stored as a `VECTOR(8)` placeholder column for vector retrieval development.
+Chunking defaults are driven by config: `chunk_size=800`, `chunk_overlap=150`, `chunk_min_length=120`.
 
 ## Vector verification
 
@@ -206,6 +210,23 @@ The temporary response includes:
 - `extracted_text`
 - `parser_metadata`
 - PDF page markers when available
+
+## Chunking verification
+
+After uploading a long document, call:
+
+```bash
+curl -X POST http://127.0.0.1:8000/documents/{document_id}/chunk
+```
+
+Each chunk row stores:
+
+- `chunk_index`
+- `text`
+- `page_reference` when available
+- `start_char`
+- `end_char`
+- `overlap_from_previous_chars`
 
 ## Quick test
 
