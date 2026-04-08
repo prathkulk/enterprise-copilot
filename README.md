@@ -25,6 +25,7 @@ This initial commit sets up:
 - grounded answer generation with citation formatting and insufficient-evidence fallback
 - single-call `/ask` endpoint for full retrieval and grounded answer flow
 - versioned grounded-answer prompt templates and guardrails
+- retrieval narrowing by document, tags, source type, upload date, and collection metadata
 
 ## Project structure
 
@@ -176,6 +177,16 @@ Grounded answering now uses a centralized versioned prompt template with these g
 - use a concise enterprise tone
 - return structured grounded-answer JSON internally for stable parsing
 
+Retrieval requests can now be narrowed with:
+
+- `collection_id`
+- `document_id` or `document_ids`
+- `tags`
+- `uploaded_from` and `uploaded_to`
+- `source_types`
+- `collection_name_contains`
+- `collection_description_contains`
+
 ## Database verification
 
 With the stack running, create a collection:
@@ -313,6 +324,19 @@ The response returns:
 - ranked chunks
 - `score`
 - citation metadata including collection, document, chunk index, page reference, and offsets
+
+To narrow retrieval scope, you can also call:
+
+```bash
+curl -X POST http://127.0.0.1:8000/retrieve \
+  -H "Content-Type: application/json" \
+  -d '{
+    "question":"Which document talks about finance forecasting?",
+    "collection_name_contains":"Finance",
+    "source_types":["txt"],
+    "top_k":3
+  }'
+```
 
 ## Answer Verification
 

@@ -25,6 +25,9 @@ class AskResponse(BaseModel):
     question: str
     collection_id: int | None
     document_id: int | None
+    document_ids: list[int] | None
+    tags: list[str] | None
+    source_types: list[str] | None
     top_k: int
     answer: str
     confidence: str
