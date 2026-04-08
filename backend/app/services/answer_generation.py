@@ -1,5 +1,11 @@
 import re
 
+from backend.app.prompts import (
+    GROUNDED_ANSWER_MODE,
+    GROUNDED_ANSWER_PROMPT_VERSION,
+    GroundedAnswerPrompt,
+    build_grounded_answer_prompt,
+)
 from sqlalchemy.orm import Session
 
 from backend.app.core.config import get_settings
@@ -13,10 +19,46 @@ settings = get_settings()
 INSUFFICIENT_EVIDENCE_ANSWER = (
     "I do not have enough evidence in the indexed documents to answer that confidently."
 )
+QUESTION_STOPWORDS = {
+    "a",
+    "an",
+    "and",
+    "are",
+    "can",
+    "does",
+    "for",
+    "from",
+    "how",
+    "in",
+    "is",
+    "it",
+    "of",
+    "or",
+    "should",
+    "tell",
+    "the",
+    "their",
+    "there",
+    "they",
+    "this",
+    "what",
+    "when",
+    "where",
+    "which",
+    "who",
+}
 
 
 def _tokenize(text: str) -> set[str]:
     return {token for token in re.findall(r"[a-z0-9]+", text.lower()) if token}
+
+
+def _significant_question_tokens(text: str) -> set[str]:
+    return {
+        token
+        for token in _tokenize(text)
+        if len(token) > 2 and token not in QUESTION_STOPWORDS
+    }
 
 
 def _render_page_reference(page_reference: int | list[int] | None) -> str | None:
@@ -26,34 +68,6 @@ def _render_page_reference(page_reference: int | list[int] | None) -> str | None
         joined_pages = ", ".join(str(page) for page in page_reference)
         return f"pages {joined_pages}"
     return f"page {page_reference}"
-
-
-def build_answer_prompt(question: str, chunks: list[RetrievedChunk]) -> str:
-    source_blocks = []
-    for index, chunk in enumerate(chunks, start=1):
-        page_reference = _render_page_reference(chunk.citation.page_reference) or "page n/a"
-        source_blocks.append(
-            "\n".join(
-                [
-                    f"[{index}] {chunk.citation.filename}",
-                    f"collection: {chunk.citation.collection_name}",
-                    f"chunk: {chunk.citation.chunk_index}",
-                    f"location: {page_reference}",
-                    f"score: {chunk.score}",
-                    chunk.text,
-                ]
-            )
-        )
-
-    sources = "\n\n".join(source_blocks)
-    return (
-        "You are a grounded answer generator. Use only the provided sources. "
-        "Answer in 1-3 concise sentences, do not invent facts, and do not include citation "
-        "markers because they are added by the server. If the evidence is weak or missing, "
-        "say that there is insufficient evidence.\n\n"
-        f"Question: {question}\n\n"
-        f"Sources:\n{sources}"
-    )
 
 
 def _supports_question(question_tokens: set[str], chunk: RetrievedChunk) -> bool:
@@ -67,7 +81,7 @@ def select_supporting_chunks(
     question: str,
     retrieved_chunks: list[RetrievedChunk],
 ) -> list[RetrievedChunk]:
-    question_tokens = _tokenize(question)
+    question_tokens = _significant_question_tokens(question)
     return [
         chunk
         for chunk in retrieved_chunks
@@ -98,12 +112,43 @@ def render_citations(chunks: list[RetrievedChunk]) -> list[AnswerCitation]:
     return citations
 
 
-def format_answer(sections: list[str], citations: list[AnswerCitation]) -> str:
-    formatted_sections = [
-        f"{section.rstrip()} {citation.marker}"
-        for section, citation in zip(sections, citations, strict=False)
+def format_answer(answer: str, citations: list[AnswerCitation]) -> str:
+    markers = " ".join(citation.marker for citation in citations)
+    if not markers:
+        return answer.strip()
+    return f"{answer.strip()} {markers}".strip()
+
+
+def _append_missing_information(answer: str, missing_information: list[str]) -> str:
+    if not missing_information:
+        return answer.strip()
+    suffix = " ".join(missing_information)
+    return f"{answer.strip()} {suffix}".strip()
+
+
+def _derive_missing_information(
+    *, question: str, supporting_chunks: list[RetrievedChunk]
+) -> list[str]:
+    question_tokens = _significant_question_tokens(question)
+    supported_tokens = set()
+    for chunk in supporting_chunks:
+        supported_tokens.update(_tokenize(chunk.text))
+
+    missing_tokens = sorted(question_tokens - supported_tokens)
+    if not missing_tokens:
+        return []
+
+    return [
+        "The indexed documents do not specify details about: "
+        + ", ".join(missing_tokens[:5])
+        + "."
     ]
-    return " ".join(formatted_sections).strip()
+
+
+def _fallback_supported_answer(supporting_chunks: list[RetrievedChunk]) -> str:
+    if not supporting_chunks:
+        return INSUFFICIENT_EVIDENCE_ANSWER
+    return supporting_chunks[0].text.strip()
 
 
 def generate_answer_from_chunks(
@@ -122,17 +167,58 @@ def generate_answer_from_chunks(
             answer=INSUFFICIENT_EVIDENCE_ANSWER,
             confidence="insufficient_evidence",
             insufficient_evidence=True,
+            missing_information=[],
+            answer_mode=GROUNDED_ANSWER_MODE,
+            prompt_version=GROUNDED_ANSWER_PROMPT_VERSION,
             citations=[],
         )
 
-    prompt = build_answer_prompt(question, supporting_chunks)
-    sections = get_llm_provider().generate_answer_sections(
-        prompt=prompt,
+    prompt_bundle = build_grounded_answer_prompt(
+        GroundedAnswerPrompt(question=question, chunks=supporting_chunks)
+    )
+    draft = get_llm_provider().generate_grounded_answer(
+        prompt_bundle=prompt_bundle,
         question=question,
         chunks=supporting_chunks,
     )
     citations = render_citations(supporting_chunks)
-    formatted_answer = format_answer(sections, citations)
+    fallback_missing_information = _derive_missing_information(
+        question=question,
+        supporting_chunks=supporting_chunks,
+    )
+
+    if draft.insufficient_evidence or not draft.answer.strip():
+        if fallback_missing_information:
+            guarded_answer = _append_missing_information(
+                _fallback_supported_answer(supporting_chunks),
+                fallback_missing_information,
+            )
+            return AnswerResponse(
+                question=question,
+                answer=format_answer(guarded_answer, citations),
+                confidence="partial",
+                insufficient_evidence=False,
+                missing_information=fallback_missing_information,
+                answer_mode=prompt_bundle.mode,
+                prompt_version=prompt_bundle.version,
+                citations=citations,
+            )
+
+        return AnswerResponse(
+            question=question,
+            answer=INSUFFICIENT_EVIDENCE_ANSWER,
+            confidence="insufficient_evidence",
+            insufficient_evidence=True,
+            missing_information=[],
+            answer_mode=prompt_bundle.mode,
+            prompt_version=prompt_bundle.version,
+            citations=[],
+        )
+
+    missing_information = draft.missing_information or fallback_missing_information
+    confidence = "partial" if missing_information else "grounded"
+    guarded_answer = _append_missing_information(draft.answer, missing_information)
+    formatted_answer = format_answer(guarded_answer, citations)
 
     if not formatted_answer:
         return AnswerResponse(
@@ -140,14 +226,20 @@ def generate_answer_from_chunks(
             answer=INSUFFICIENT_EVIDENCE_ANSWER,
             confidence="insufficient_evidence",
             insufficient_evidence=True,
+            missing_information=[],
+            answer_mode=prompt_bundle.mode,
+            prompt_version=prompt_bundle.version,
             citations=[],
         )
 
     return AnswerResponse(
         question=question,
         answer=formatted_answer,
-        confidence="grounded",
+        confidence=confidence,
         insufficient_evidence=False,
+        missing_information=missing_information,
+        answer_mode=prompt_bundle.mode,
+        prompt_version=prompt_bundle.version,
         citations=citations,
     )
 

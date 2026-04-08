@@ -19,6 +19,9 @@ class AnswerCitation(RetrievalCitation):
 class AnswerResponse(BaseModel):
     question: str
     answer: str
-    confidence: Literal["grounded", "insufficient_evidence"]
+    confidence: Literal["grounded", "partial", "insufficient_evidence"]
     insufficient_evidence: bool
+    missing_information: list[str]
+    answer_mode: str
+    prompt_version: str
     citations: list[AnswerCitation]

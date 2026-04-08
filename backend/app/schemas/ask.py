@@ -29,6 +29,9 @@ class AskResponse(BaseModel):
     answer: str
     confidence: str
     insufficient_evidence: bool
+    missing_information: list[str]
+    answer_mode: str
+    prompt_version: str
     citations: list[AnswerCitation]
     retrieved_chunks: list[RetrievedChunk]
     latency_ms: AskLatency

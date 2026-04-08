@@ -24,6 +24,7 @@ This initial commit sets up:
 - top-k semantic retrieval service with collection/document filters
 - grounded answer generation with citation formatting and insufficient-evidence fallback
 - single-call `/ask` endpoint for full retrieval and grounded answer flow
+- versioned grounded-answer prompt templates and guardrails
 
 ## Project structure
 
@@ -49,6 +50,9 @@ This initial commit sets up:
 │   │   │   ├── document.py
 │   │   │   ├── document_chunk.py
 │   │   │   └── ingestion_job.py
+│   │   ├── prompts
+│   │   │   ├── __init__.py
+│   │   │   └── grounded_answer.py
 │   │   ├── schemas
 │   │   │   ├── ask.py
 │   │   │   ├── answers.py
@@ -164,6 +168,13 @@ docker compose down
 - `POST /debug/vector-search/embeddings` returns deterministic mock embeddings for debug verification.
 - `POST /debug/vector-search/seed` inserts mock chunk rows with fake embeddings.
 - `POST /debug/vector-search/query` runs a temporary top-k similarity search.
+
+Grounded answering now uses a centralized versioned prompt template with these guardrails:
+
+- answer only from provided context
+- explicitly say when evidence is insufficient
+- use a concise enterprise tone
+- return structured grounded-answer JSON internally for stable parsing
 
 ## Database verification
 
@@ -317,6 +328,7 @@ Expected behavior:
 
 - the answer is grounded in retrieved chunk text
 - inline citations such as `[1]` map to real chunk and document references
+- partially answerable questions return supported facts and identify missing information
 - irrelevant questions return an insufficient-evidence response
 
 ## Ask Verification

@@ -85,11 +85,14 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         if not texts:
             return []
 
-        response = self._get_client().embeddings.create(
-            model=settings.embedding_model,
-            input=list(texts),
-            dimensions=settings.resolved_embedding_dimensions,
-        )
+        try:
+            response = self._get_client().embeddings.create(
+                model=settings.embedding_model,
+                input=list(texts),
+                dimensions=settings.resolved_embedding_dimensions,
+            )
+        except Exception as exc:
+            raise EmbeddingProviderError(_format_openai_error(exc)) from exc
         return [list(item.embedding) for item in response.data]
 
     def embed_query(self, text: str) -> list[float]:
@@ -118,3 +121,10 @@ def get_embedding_provider() -> EmbeddingProvider:
         "placeholder": PlaceholderEmbeddingProvider(),
     }
     return providers.get(settings.embedding_provider, OpenAIEmbeddingProvider())
+
+
+def _format_openai_error(exc: Exception) -> str:
+    status_code = getattr(exc, "status_code", None)
+    if status_code is not None:
+        return f"OpenAI embedding request failed ({status_code}): {exc}"
+    return f"OpenAI embedding request failed: {exc}"

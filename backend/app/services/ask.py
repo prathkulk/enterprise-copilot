@@ -48,6 +48,9 @@ def ask_question(payload: AskRequest, db: Session) -> AskResponse:
         answer=answer_response.answer,
         confidence=answer_response.confidence,
         insufficient_evidence=answer_response.insufficient_evidence,
+        missing_information=answer_response.missing_information,
+        answer_mode=answer_response.answer_mode,
+        prompt_version=answer_response.prompt_version,
         citations=answer_response.citations,
         retrieved_chunks=retrieval_response.results,
         latency_ms=AskLatency(
