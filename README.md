@@ -20,6 +20,7 @@ This initial commit sets up:
 - text extraction pipeline for TXT, PDF, and DOCX
 - semantic chunking pipeline with configurable overlap
 - embedding provider abstraction with deterministic mock embeddings
+- end-to-end ingestion pipeline for extract, chunk, and embed
 
 ## Project structure
 
@@ -50,6 +51,7 @@ This initial commit sets up:
 │   │   │   ├── document_parsers.py
 │   │   │   ├── document_service.py
 │   │   │   ├── embeddings.py
+│   │   │   ├── ingestion.py
 │   │   │   ├── storage.py
 │   │   │   ├── text_extraction.py
 │   │   │   └── vector_search.py
@@ -141,6 +143,7 @@ docker compose down
 - `DELETE /documents/{document_id}` removes a document and its stored file copy.
 - `POST /documents/{document_id}/extract` runs temporary raw-text extraction for an uploaded document.
 - `POST /documents/{document_id}/chunk` runs temporary chunk generation and stores chunk rows.
+- `POST /documents/{document_id}/ingest` runs extraction, chunking, embedding, and indexing in one step.
 - `POST /debug/vector-search/embeddings` returns deterministic mock embeddings for debug verification.
 - `POST /debug/vector-search/seed` inserts mock chunk rows with fake embeddings.
 - `POST /debug/vector-search/query` runs a temporary top-k similarity search.
@@ -184,6 +187,7 @@ The backend currently creates these relational tables:
 `document_chunks.embedding` is stored as a `VECTOR(8)` placeholder column for vector retrieval development.
 Chunking defaults are driven by config: `chunk_size=800`, `chunk_overlap=150`, `chunk_min_length=120`.
 Embedding generation is provider-driven via config and defaults to the deterministic `mock` provider for local development.
+Document statuses currently move through `uploaded`, `processing`, `indexed`, and `failed`.
 
 ## Vector verification
 
@@ -247,6 +251,22 @@ For the mock provider:
 - repeated input returns the same embedding
 - different text returns a different vector
 - vector length matches `embedding_dimensions`
+
+## Ingestion Verification
+
+After uploading a document, call:
+
+```bash
+curl -X POST http://127.0.0.1:8000/documents/{document_id}/ingest
+```
+
+Expected behavior:
+
+- document status starts as `uploaded`
+- ingestion sets status to `processing`
+- chunk rows are created
+- embeddings are saved on chunks
+- final document status becomes `indexed`
 
 ## Quick test
 

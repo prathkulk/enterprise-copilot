@@ -6,6 +6,7 @@ from backend.app.schemas.documents import (
     DocumentChunkingResponse,
     DocumentDetailResponse,
     DocumentExtractionResponse,
+    DocumentIngestionResponse,
     DocumentListItem,
     DocumentUploadResponse,
 )
@@ -19,6 +20,7 @@ from backend.app.services.document_service import (
     list_documents_for_collection as list_documents_for_collection_records,
     upload_document as upload_document_record,
 )
+from backend.app.services.ingestion import ingest_document as ingest_document_record
 from backend.app.services.text_extraction import (
     DocumentExtractionNotAvailableError,
     extract_document_text as extract_document_text_record,
@@ -116,6 +118,20 @@ def extract_document_text(document_id: int, db: Session = Depends(get_db_session
 def chunk_document(document_id: int, db: Session = Depends(get_db_session)):
     try:
         return chunk_document_record(db=db, document_id=document_id)
+    except DocumentNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found",
+        ) from exc
+
+
+@router.post(
+    "/documents/{document_id}/ingest",
+    response_model=DocumentIngestionResponse,
+)
+def ingest_document(document_id: int, db: Session = Depends(get_db_session)):
+    try:
+        return ingest_document_record(db=db, document_id=document_id)
     except DocumentNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
