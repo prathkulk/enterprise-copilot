@@ -30,6 +30,7 @@ This initial commit sets up:
 - chat sessions with persisted multi-turn message history
 - conversation-aware session retrieval with follow-up query rewriting
 - answer feedback capture for relevance signals
+- structured logging and request-level observability for ingestion and ask flows
 
 ## Project structure
 
@@ -48,7 +49,8 @@ This initial commit sets up:
 │   │   │   │   └── vector_debug.py
 │   │   │   └── router.py
 │   │   ├── core
-│   │   │   └── config.py
+│   │   │   ├── config.py
+│   │   │   └── observability.py
 │   │   ├── db
 │   │   │   ├── base.py
 │   │   │   └── session.py
@@ -255,6 +257,7 @@ Ingestion jobs currently move through `pending`, `processing`, `indexed`, and `f
 Session asks persist both the user question and assistant answer so multi-turn history can be retrieved later from `/sessions/{session_id}/messages`.
 Session follow-up questions now use recent session turns to generate a standalone retrieval query before semantic search runs.
 Answer feedback can now be attached to assistant messages for later relevance evaluation and ranking improvements.
+Request logging now emits structured JSON with `request_id`, request timing, ingestion stage durations, ask latency fields, `top_k`, `collection_id`, and token/cost placeholders for future provider accounting.
 
 ## Vector verification
 

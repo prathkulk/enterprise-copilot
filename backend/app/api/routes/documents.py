@@ -4,12 +4,14 @@ from fastapi import (
     Depends,
     File,
     HTTPException,
+    Request,
     Response,
     UploadFile,
     status,
 )
 from sqlalchemy.orm import Session
 
+from backend.app.core.observability import get_request_id
 from backend.app.db.session import get_db_session
 from backend.app.schemas.documents import (
     DocumentChunkingResponse,
@@ -147,11 +149,16 @@ def chunk_document(document_id: int, db: Session = Depends(get_db_session)):
 def ingest_document(
     document_id: int,
     background_tasks: BackgroundTasks,
+    request: Request,
     db: Session = Depends(get_db_session),
 ):
     try:
         job = queue_ingestion_job_record(db=db, document_id=document_id)
-        background_tasks.add_task(run_ingestion_job, job.id)
+        background_tasks.add_task(
+            run_ingestion_job,
+            job.id,
+            request.state.request_id or get_request_id(),
+        )
         return job
     except DocumentNotFoundError as exc:
         raise HTTPException(

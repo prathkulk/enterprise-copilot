@@ -1,8 +1,10 @@
+import logging
 from time import perf_counter
 from typing import NamedTuple
 
 from sqlalchemy.orm import Session
 
+from backend.app.core.observability import log_event
 from backend.app.schemas.ask import (
     AskLatency,
     AskProviderMetadata,
@@ -14,6 +16,8 @@ from backend.app.services.answer_generation import generate_answer_from_chunks
 from backend.app.services.llm import get_llm_provider
 from backend.app.services.embeddings import get_embedding_provider
 from backend.app.services.retrieval import retrieve_chunks
+
+logger = logging.getLogger("enterprise_copilot.ask")
 
 
 class AskExecutionResult(NamedTuple):
@@ -31,51 +35,106 @@ def run_ask_question(
     embedding_provider = get_embedding_provider()
     llm_provider = get_llm_provider()
     total_started_at = perf_counter()
+    log_event(
+        logger,
+        logging.INFO,
+        "ask.started",
+        collection_id=payload.collection_id,
+        document_id=payload.document_id,
+        top_k=payload.top_k,
+        rewrite_applied=(
+            retrieval_question is not None
+            and retrieval_question.strip() != payload.question.strip()
+        ),
+    )
     retrieval_request_payload = payload.model_dump()
     retrieval_request_payload["question"] = retrieval_question or payload.question
     retrieval_request = RetrievalRequest.model_validate(retrieval_request_payload)
 
-    retrieval_started_at = perf_counter()
-    retrieval_response = retrieve_chunks(db=db, payload=retrieval_request)
-    retrieval_duration_ms = round((perf_counter() - retrieval_started_at) * 1000, 3)
+    try:
+        retrieval_started_at = perf_counter()
+        retrieval_response = retrieve_chunks(db=db, payload=retrieval_request)
+        retrieval_duration_ms = round((perf_counter() - retrieval_started_at) * 1000, 3)
+        log_event(
+            logger,
+            logging.INFO,
+            "ask.retrieval.completed",
+            collection_id=retrieval_request.collection_id,
+            document_id=retrieval_request.document_id,
+            top_k=retrieval_request.top_k,
+            retrieval_latency_ms=retrieval_duration_ms,
+            retrieved_chunk_count=len(retrieval_response.results),
+        )
 
-    answer_started_at = perf_counter()
-    answer_response = generate_answer_from_chunks(
-        question=payload.question,
-        retrieved_chunks=retrieval_response.results,
-    )
-    answer_duration_ms = round((perf_counter() - answer_started_at) * 1000, 3)
-    total_duration_ms = round((perf_counter() - total_started_at) * 1000, 3)
+        answer_started_at = perf_counter()
+        answer_response = generate_answer_from_chunks(
+            question=payload.question,
+            retrieved_chunks=retrieval_response.results,
+        )
+        answer_duration_ms = round((perf_counter() - answer_started_at) * 1000, 3)
+        total_duration_ms = round((perf_counter() - total_started_at) * 1000, 3)
 
-    response = AskResponse(
-        question=payload.question,
-        collection_id=retrieval_request.collection_id,
-        document_id=retrieval_request.document_id,
-        document_ids=retrieval_request.document_ids,
-        tags=retrieval_request.tags,
-        source_types=retrieval_request.source_types,
-        top_k=retrieval_request.top_k,
-        answer=answer_response.answer,
-        confidence=answer_response.confidence,
-        insufficient_evidence=answer_response.insufficient_evidence,
-        missing_information=answer_response.missing_information,
-        answer_mode=answer_response.answer_mode,
-        prompt_version=answer_response.prompt_version,
-        citations=answer_response.citations,
-        retrieved_chunks=retrieval_response.results,
-        latency_ms=AskLatency(
-            total_ms=total_duration_ms,
-            retrieval_ms=retrieval_duration_ms,
-            answer_generation_ms=answer_duration_ms,
-        ),
-        providers=AskProviderMetadata(
+        response = AskResponse(
+            question=payload.question,
+            collection_id=retrieval_request.collection_id,
+            document_id=retrieval_request.document_id,
+            document_ids=retrieval_request.document_ids,
+            tags=retrieval_request.tags,
+            source_types=retrieval_request.source_types,
+            top_k=retrieval_request.top_k,
+            answer=answer_response.answer,
+            confidence=answer_response.confidence,
+            insufficient_evidence=answer_response.insufficient_evidence,
+            missing_information=answer_response.missing_information,
+            answer_mode=answer_response.answer_mode,
+            prompt_version=answer_response.prompt_version,
+            citations=answer_response.citations,
+            retrieved_chunks=retrieval_response.results,
+            latency_ms=AskLatency(
+                total_ms=total_duration_ms,
+                retrieval_ms=retrieval_duration_ms,
+                answer_generation_ms=answer_duration_ms,
+            ),
+            providers=AskProviderMetadata(
+                embedding_provider=embedding_provider.provider_name,
+                embedding_model=embedding_provider.model_name,
+                llm_provider=llm_provider.provider_name,
+                llm_model=llm_provider.model_name,
+            ),
+        )
+        log_event(
+            logger,
+            logging.INFO,
+            "ask.completed",
+            collection_id=retrieval_request.collection_id,
+            document_id=retrieval_request.document_id,
+            top_k=retrieval_request.top_k,
+            retrieval_latency_ms=retrieval_duration_ms,
+            generation_latency_ms=answer_duration_ms,
+            total_latency_ms=total_duration_ms,
+            retrieved_chunk_count=len(retrieval_response.results),
+            confidence=answer_response.confidence,
             embedding_provider=embedding_provider.provider_name,
             embedding_model=embedding_provider.model_name,
             llm_provider=llm_provider.provider_name,
             llm_model=llm_provider.model_name,
-        ),
-    )
-    return AskExecutionResult(
-        response=response,
-        retrieval_question=retrieval_request.question,
-    )
+            input_tokens=None,
+            output_tokens=None,
+            estimated_cost_usd=None,
+        )
+        return AskExecutionResult(
+            response=response,
+            retrieval_question=retrieval_request.question,
+        )
+    except Exception as exc:
+        log_event(
+            logger,
+            logging.ERROR,
+            "ask.failed",
+            collection_id=payload.collection_id,
+            document_id=payload.document_id,
+            top_k=payload.top_k,
+            total_latency_ms=round((perf_counter() - total_started_at) * 1000, 3),
+            error=str(exc),
+        )
+        raise
