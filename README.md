@@ -14,6 +14,7 @@ This initial commit sets up:
 - Docker-based local development stack
 - PostgreSQL service for local development
 - SQLAlchemy ORM, session management, and initial relational models
+- pgvector extension support and vector-ready chunk embeddings
 
 ## Project structure
 
@@ -24,7 +25,8 @@ This initial commit sets up:
 │   │   ├── api
 │   │   │   ├── routes
 │   │   │   │   ├── collections.py
-│   │   │   │   └── system.py
+│   │   │   │   ├── system.py
+│   │   │   │   └── vector_debug.py
 │   │   │   └── router.py
 │   │   ├── core
 │   │   │   └── config.py
@@ -36,6 +38,8 @@ This initial commit sets up:
 │   │   │   ├── document.py
 │   │   │   ├── document_chunk.py
 │   │   │   └── ingestion_job.py
+│   │   ├── services
+│   │   │   └── vector_search.py
 │   │   └── main.py
 │   ├── Dockerfile
 │   └── requirements.txt
@@ -100,6 +104,7 @@ The compose stack includes:
 - `postgres` running PostgreSQL 16 with a persistent named volume
 
 On startup, the API creates the current SQLAlchemy tables automatically for local development.
+It also enables the `vector` extension and ensures the `document_chunks.embedding` column exists.
 
 To stop the stack:
 
@@ -114,6 +119,8 @@ docker compose down
 - `GET /docs` opens the Swagger UI.
 - `POST /collections` creates a collection row in PostgreSQL.
 - `GET /collections/{collection_id}` fetches a collection row back by id.
+- `POST /debug/vector-search/seed` inserts mock chunk rows with fake embeddings.
+- `POST /debug/vector-search/query` runs a temporary top-k similarity search.
 
 ## Database verification
 
@@ -137,6 +144,24 @@ The backend currently creates these relational tables:
 - `documents`
 - `document_chunks`
 - `ingestion_jobs`
+
+`document_chunks.embedding` is stored as a `VECTOR(8)` placeholder column for vector retrieval development.
+
+## Vector verification
+
+With the stack running, seed mock vectors:
+
+```bash
+curl -X POST http://127.0.0.1:8000/debug/vector-search/seed
+```
+
+Then query for similar chunks:
+
+```bash
+curl -X POST http://127.0.0.1:8000/debug/vector-search/query \
+  -H "Content-Type: application/json" \
+  -d '{"query_embedding":[1,0,0,0,0,0,0,0],"limit":2}'
+```
 
 ## Quick test
 

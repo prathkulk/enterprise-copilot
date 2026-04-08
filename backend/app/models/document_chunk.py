@@ -1,9 +1,13 @@
 from typing import Any
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import ForeignKey, JSON, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from backend.app.core.config import get_settings
 from backend.app.models.base import BaseModel, TimestampMixin
+
+settings = get_settings()
 
 
 class DocumentChunk(TimestampMixin, BaseModel):
@@ -16,5 +20,8 @@ class DocumentChunk(TimestampMixin, BaseModel):
     chunk_index: Mapped[int] = mapped_column(nullable=False)
     text: Mapped[str] = mapped_column(Text, nullable=False)
     metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    embedding: Mapped[list[float] | None] = mapped_column(
+        Vector(settings.embedding_dimensions), nullable=True
+    )
 
     document = relationship("Document", back_populates="chunks")
