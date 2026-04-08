@@ -38,9 +38,9 @@ class DocumentNotFoundError(Exception):
 
 
 def upload_document(
-    db: Session, collection_id: int, file: UploadFile
+    db: Session, collection_id: int, file: UploadFile, tenant_id: int
 ) -> DocumentUploadResponse:
-    get_collection(db, collection_id)
+    get_collection(db, collection_id, tenant_id)
 
     extension = Path(file.filename or "").suffix.lower()
     document_type = SUPPORTED_DOCUMENT_TYPES.get(extension)
@@ -78,12 +78,14 @@ def upload_document(
 
 
 def list_documents_for_collection(
-    db: Session, collection_id: int
+    db: Session, collection_id: int, tenant_id: int
 ) -> list[DocumentListItem]:
-    get_collection(db, collection_id)
+    get_collection(db, collection_id, tenant_id)
     statement = (
         select(Document)
         .where(Document.collection_id == collection_id)
+        .join(Document.collection)
+        .where(Document.collection.has(tenant_id=tenant_id))
         .options(selectinload(Document.collection), selectinload(Document.chunks))
         .order_by(Document.created_at.desc(), Document.id.desc())
     )
@@ -91,13 +93,15 @@ def list_documents_for_collection(
     return [serialize_document(document) for document in documents]
 
 
-def get_document_detail(db: Session, document_id: int) -> DocumentDetailResponse:
-    document = _get_document_model(db, document_id)
+def get_document_detail(
+    db: Session, document_id: int, tenant_id: int
+) -> DocumentDetailResponse:
+    document = _get_document_model(db, document_id, tenant_id)
     return serialize_document_detail(document)
 
 
-def delete_document(db: Session, document_id: int) -> None:
-    document = _get_document_model(db, document_id)
+def delete_document(db: Session, document_id: int, tenant_id: int) -> None:
+    document = _get_document_model(db, document_id, tenant_id)
     storage = LocalFileStorage()
     storage.delete_file(document.metadata_json.get("storage_path"))
     db.delete(document)
@@ -131,10 +135,12 @@ def serialize_document_detail(document: Document) -> DocumentDetailResponse:
     )
 
 
-def _get_document_model(db: Session, document_id: int) -> Document:
+def _get_document_model(db: Session, document_id: int, tenant_id: int) -> Document:
     statement = (
         select(Document)
         .where(Document.id == document_id)
+        .join(Document.collection)
+        .where(Document.collection.has(tenant_id=tenant_id))
         .options(selectinload(Document.collection), selectinload(Document.chunks))
     )
     document = db.scalar(statement)

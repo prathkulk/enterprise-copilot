@@ -31,6 +31,7 @@ This initial commit sets up:
 - conversation-aware session retrieval with follow-up query rewriting
 - answer feedback capture for relevance signals
 - structured logging and request-level observability for ingestion and ask flows
+- local JWT authentication with tenant-scoped data access
 
 ## Project structure
 
@@ -40,6 +41,7 @@ This initial commit sets up:
 │   ├── app
 │   │   ├── api
 │   │   │   ├── routes
+│   │   │   │   ├── auth.py
 │   │   │   │   ├── collections.py
 │   │   │   │   ├── chat.py
 │   │   │   │   ├── documents.py
@@ -61,12 +63,15 @@ This initial commit sets up:
 │   │   │   ├── document.py
 │   │   │   ├── document_chunk.py
 │   │   │   ├── ingestion_job.py
-│   │   │   └── message_feedback.py
+│   │   │   ├── message_feedback.py
+│   │   │   ├── tenant.py
+│   │   │   └── user.py
 │   │   ├── prompts
 │   │   │   ├── __init__.py
 │   │   │   ├── grounded_answer.py
 │   │   │   └── query_rewrite.py
 │   │   ├── schemas
+│   │   │   ├── auth.py
 │   │   │   ├── ask.py
 │   │   │   ├── answers.py
 │   │   │   ├── chat.py
@@ -77,6 +82,7 @@ This initial commit sets up:
 │   │   ├── services
 │   │   │   ├── ask.py
 │   │   │   ├── answer_generation.py
+│   │   │   ├── auth_service.py
 │   │   │   ├── chat_service.py
 │   │   │   ├── chunking.py
 │   │   │   ├── collection_service.py
@@ -117,6 +123,7 @@ This initial commit sets up:
 3. Create a `.env` file with at least:
 
    ```bash
+   AUTH_SECRET_KEY=replace-this-with-a-long-random-secret
    OPENAI_API_KEY=your_api_key_here
    EMBEDDING_PROVIDER=openai
    EMBEDDING_MODEL=text-embedding-3-small
@@ -167,6 +174,8 @@ docker compose down
 - `GET /health` returns a basic service health payload.
 - `GET /version` returns the API version payload.
 - `GET /docs` opens the Swagger UI.
+- `POST /auth/register` creates a tenant and local user, then returns a bearer token.
+- `POST /auth/login` returns a bearer token for an existing local user.
 - `POST /collections` creates a collection row in PostgreSQL.
 - `GET /collections` lists existing collections.
 - `GET /collections/{collection_id}` fetches a collection row back by id.
@@ -191,6 +200,11 @@ docker compose down
 - `POST /debug/vector-search/seed` inserts mock chunk rows with fake embeddings.
 - `POST /debug/vector-search/query` runs a temporary top-k similarity search.
 
+All endpoints other than `/health`, `/version`, `/docs`, `/auth/register`, and `/auth/login`
+require `Authorization: Bearer <token>`. Data access is tenant-scoped, so collections,
+documents, retrieval, jobs, chat sessions, and debug vector queries only operate on the
+authenticated user's tenant data.
+
 Grounded answering now uses a centralized versioned prompt template with these guardrails:
 
 - answer only from provided context
@@ -213,7 +227,13 @@ Retrieval requests can now be narrowed with:
 With the stack running, create a collection:
 
 ```bash
+TOKEN=$(curl -s -X POST http://127.0.0.1:8000/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"tenant_name":"Demo Tenant","email":"demo@example.com","full_name":"Demo User","password":"ChangeMe123!"}' \
+  | python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])')
+
 curl -X POST http://127.0.0.1:8000/collections \
+  -H "Authorization: Bearer ${TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{"name":"Demo Collection","description":"Temporary verification collection"}'
 ```
@@ -221,20 +241,23 @@ curl -X POST http://127.0.0.1:8000/collections \
 Then fetch it back:
 
 ```bash
-curl http://127.0.0.1:8000/collections/1
+curl http://127.0.0.1:8000/collections/1 \
+  -H "Authorization: Bearer ${TOKEN}"
 ```
 
 To upload a document into a collection:
 
 ```bash
 curl -X POST http://127.0.0.1:8000/collections/1/documents/upload \
+  -H "Authorization: Bearer ${TOKEN}" \
   -F "file=@/path/to/sample.txt"
 ```
 
 To extract raw text from an uploaded document:
 
 ```bash
-curl -X POST http://127.0.0.1:8000/documents/1/extract
+curl -X POST http://127.0.0.1:8000/documents/1/extract \
+  -H "Authorization: Bearer ${TOKEN}"
 ```
 
 The backend currently creates these relational tables:
@@ -246,6 +269,8 @@ The backend currently creates these relational tables:
 - `documents`
 - `document_chunks`
 - `ingestion_jobs`
+- `tenants`
+- `users`
 
 `document_chunks.embedding` is stored as a `VECTOR(n)` column sized to the active embedding model.
 Chunking defaults are driven by config: `chunk_size=800`, `chunk_overlap=150`, `chunk_min_length=120`.
@@ -258,6 +283,7 @@ Session asks persist both the user question and assistant answer so multi-turn h
 Session follow-up questions now use recent session turns to generate a standalone retrieval query before semantic search runs.
 Answer feedback can now be attached to assistant messages for later relevance evaluation and ranking improvements.
 Request logging now emits structured JSON with `request_id`, request timing, ingestion stage durations, ask latency fields, `top_k`, `collection_id`, and token/cost placeholders for future provider accounting.
+Collections, chat sessions, retrieval, and document access are now tenant-scoped so one tenant cannot access another tenant's indexed data through the API.
 
 ## Vector verification
 

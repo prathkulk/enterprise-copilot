@@ -244,10 +244,11 @@ def generate_answer_from_chunks(
     )
 
 
-def generate_answer(payload: AnswerRequest, db: Session) -> AnswerResponse:
+def generate_answer(payload: AnswerRequest, db: Session, tenant_id: int) -> AnswerResponse:
     retrieval_response = retrieve_chunks(
         db=db,
         payload=RetrievalRequest.model_validate(payload.model_dump()),
+        tenant_id=tenant_id,
     )
     return generate_answer_from_chunks(
         question=payload.question,

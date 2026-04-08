@@ -32,8 +32,10 @@ class IngestionJobNotFoundError(Exception):
     """Raised when the requested ingestion job does not exist."""
 
 
-def queue_ingestion_job(db: Session, document_id: int) -> IngestionJobQueuedResponse:
-    document = _get_document(db, document_id)
+def queue_ingestion_job(
+    db: Session, document_id: int, tenant_id: int
+) -> IngestionJobQueuedResponse:
+    document = _get_document(db, document_id, tenant_id=tenant_id)
     active_job = db.scalar(
         select(IngestionJob)
         .where(IngestionJob.document_id == document_id)
@@ -177,21 +179,29 @@ def _process_ingestion_job(db: Session, job_id: int) -> None:
         raise
 
 
-def _get_document(db: Session, document_id: int) -> Document:
+def _get_document(
+    db: Session, document_id: int, tenant_id: int | None = None
+) -> Document:
     statement = (
         select(Document)
         .where(Document.id == document_id)
         .options(selectinload(Document.chunks), selectinload(Document.ingestion_jobs))
     )
+    if tenant_id is not None:
+        statement = statement.join(Document.collection).where(
+            Document.collection.has(tenant_id=tenant_id)
+        )
     document = db.scalar(statement)
     if document is None:
         raise DocumentNotFoundError
     return document
 
 
-def get_ingestion_job_status(db: Session, job_id: int) -> IngestionJobStatusResponse:
-    job = _get_job(db, job_id)
-    document = _get_document(db, job.document_id)
+def get_ingestion_job_status(
+    db: Session, job_id: int, tenant_id: int
+) -> IngestionJobStatusResponse:
+    job = _get_job(db, job_id, tenant_id=tenant_id)
+    document = _get_document(db, job.document_id, tenant_id=tenant_id)
     chunk_count = db.scalar(
         select(func.count(DocumentChunk.id)).where(DocumentChunk.document_id == document.id)
     )
@@ -213,8 +223,15 @@ def get_ingestion_job_status(db: Session, job_id: int) -> IngestionJobStatusResp
     )
 
 
-def _get_job(db: Session, job_id: int) -> IngestionJob:
-    job = db.get(IngestionJob, job_id)
+def _get_job(
+    db: Session, job_id: int, tenant_id: int | None = None
+) -> IngestionJob:
+    statement = select(IngestionJob).where(IngestionJob.id == job_id)
+    if tenant_id is not None:
+        statement = statement.join(IngestionJob.document).join(Document.collection).where(
+            Document.collection.has(tenant_id=tenant_id)
+        )
+    job = db.scalar(statement)
     if job is None:
         raise IngestionJobNotFoundError
     return job

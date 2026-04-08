@@ -2,11 +2,13 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from backend.app.db.session import get_db_session
+from backend.app.models.user import User
 from backend.app.schemas.ask import AskRequest, AskResponse
 from backend.app.schemas.answers import AnswerRequest, AnswerResponse
 from backend.app.schemas.retrieval import RetrievalRequest, RetrievalResponse
 from backend.app.services.ask import ask_question
 from backend.app.services.answer_generation import generate_answer
+from backend.app.services.auth_service import get_current_user
 from backend.app.services.embeddings import EmbeddingProviderError
 from backend.app.services.llm import LLMProviderError
 from backend.app.services.retrieval import retrieve_chunks
@@ -15,9 +17,13 @@ router = APIRouter(tags=["retrieval"])
 
 
 @router.post("/retrieve", response_model=RetrievalResponse)
-def retrieve(payload: RetrievalRequest, db: Session = Depends(get_db_session)):
+def retrieve(
+    payload: RetrievalRequest,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
+):
     try:
-        return retrieve_chunks(db=db, payload=payload)
+        return retrieve_chunks(db=db, payload=payload, tenant_id=current_user.tenant_id)
     except EmbeddingProviderError as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -26,9 +32,13 @@ def retrieve(payload: RetrievalRequest, db: Session = Depends(get_db_session)):
 
 
 @router.post("/answer", response_model=AnswerResponse)
-def answer(payload: AnswerRequest, db: Session = Depends(get_db_session)):
+def answer(
+    payload: AnswerRequest,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
+):
     try:
-        return generate_answer(payload=payload, db=db)
+        return generate_answer(payload=payload, db=db, tenant_id=current_user.tenant_id)
     except (EmbeddingProviderError, LLMProviderError) as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -37,9 +47,13 @@ def answer(payload: AnswerRequest, db: Session = Depends(get_db_session)):
 
 
 @router.post("/ask", response_model=AskResponse)
-def ask(payload: AskRequest, db: Session = Depends(get_db_session)):
+def ask(
+    payload: AskRequest,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
+):
     try:
-        return ask_question(payload=payload, db=db)
+        return ask_question(payload=payload, db=db, tenant_id=current_user.tenant_id)
     except (EmbeddingProviderError, LLMProviderError) as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

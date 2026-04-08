@@ -14,28 +14,40 @@ class CollectionConflictError(Exception):
     """Raised when a collection update would violate uniqueness."""
 
 
-def create_collection(db: Session, payload: CollectionCreate) -> Collection:
-    collection = Collection(name=payload.name, description=payload.description)
+def create_collection(db: Session, payload: CollectionCreate, tenant_id: int) -> Collection:
+    collection = Collection(
+        tenant_id=tenant_id,
+        name=payload.name,
+        description=payload.description,
+    )
     db.add(collection)
     return _commit_and_refresh(db, collection)
 
 
-def list_collections(db: Session) -> list[Collection]:
-    statement = select(Collection).order_by(Collection.created_at.desc(), Collection.id.desc())
+def list_collections(db: Session, tenant_id: int) -> list[Collection]:
+    statement = (
+        select(Collection)
+        .where(Collection.tenant_id == tenant_id)
+        .order_by(Collection.created_at.desc(), Collection.id.desc())
+    )
     return list(db.scalars(statement))
 
 
-def get_collection(db: Session, collection_id: int) -> Collection:
-    collection = db.get(Collection, collection_id)
+def get_collection(db: Session, collection_id: int, tenant_id: int) -> Collection:
+    collection = db.scalar(
+        select(Collection)
+        .where(Collection.id == collection_id)
+        .where(Collection.tenant_id == tenant_id)
+    )
     if collection is None:
         raise CollectionNotFoundError
     return collection
 
 
 def update_collection(
-    db: Session, collection_id: int, payload: CollectionUpdate
+    db: Session, collection_id: int, payload: CollectionUpdate, tenant_id: int
 ) -> Collection:
-    collection = get_collection(db, collection_id)
+    collection = get_collection(db, collection_id, tenant_id)
     updates = payload.model_dump(exclude_unset=True)
 
     for field, value in updates.items():
@@ -44,8 +56,8 @@ def update_collection(
     return _commit_and_refresh(db, collection)
 
 
-def delete_collection(db: Session, collection_id: int) -> None:
-    collection = get_collection(db, collection_id)
+def delete_collection(db: Session, collection_id: int, tenant_id: int) -> None:
+    collection = get_collection(db, collection_id, tenant_id)
     db.delete(collection)
     db.commit()
 

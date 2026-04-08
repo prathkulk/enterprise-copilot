@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from backend.app.db.session import get_db_session
+from backend.app.models.user import User
 from backend.app.schemas.chat import (
     ChatSessionCreate,
     ChatSessionMessagesResponse,
@@ -11,6 +12,7 @@ from backend.app.schemas.chat import (
     SessionAskRequest,
     SessionAskResponse,
 )
+from backend.app.services.auth_service import get_current_user
 from backend.app.services.chat_service import (
     ChatMessageNotFoundError,
     ChatSessionNotFoundError,
@@ -33,10 +35,12 @@ router = APIRouter(tags=["chat"])
     status_code=status.HTTP_201_CREATED,
 )
 def create_session(
-    payload: ChatSessionCreate, db: Session = Depends(get_db_session)
+    payload: ChatSessionCreate,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
 ):
     try:
-        return create_chat_session(db=db, payload=payload)
+        return create_chat_session(db=db, payload=payload, current_user=current_user)
     except CollectionNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -48,9 +52,17 @@ def create_session(
     "/sessions/{session_id}/messages",
     response_model=ChatSessionMessagesResponse,
 )
-def get_session_messages(session_id: int, db: Session = Depends(get_db_session)):
+def get_session_messages(
+    session_id: int,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
+):
     try:
-        return list_session_messages(db=db, session_id=session_id)
+        return list_session_messages(
+            db=db,
+            session_id=session_id,
+            current_user=current_user,
+        )
     except ChatSessionNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -66,9 +78,15 @@ def ask_in_session(
     session_id: int,
     payload: SessionAskRequest,
     db: Session = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
 ):
     try:
-        return ask_within_session(db=db, session_id=session_id, payload=payload)
+        return ask_within_session(
+            db=db,
+            session_id=session_id,
+            payload=payload,
+            current_user=current_user,
+        )
     except ChatSessionNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -95,9 +113,15 @@ def create_message_feedback(
     message_id: int,
     payload: MessageFeedbackCreate,
     db: Session = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
 ):
     try:
-        return submit_message_feedback(db=db, message_id=message_id, payload=payload)
+        return submit_message_feedback(
+            db=db,
+            message_id=message_id,
+            payload=payload,
+            current_user=current_user,
+        )
     except ChatMessageNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

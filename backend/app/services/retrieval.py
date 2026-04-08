@@ -13,7 +13,9 @@ from backend.app.schemas.retrieval import (
 from backend.app.services.embeddings import get_embedding_provider
 
 
-def retrieve_chunks(db: Session, payload: RetrievalRequest) -> RetrievalResponse:
+def retrieve_chunks(
+    db: Session, payload: RetrievalRequest, tenant_id: int
+) -> RetrievalResponse:
     embedding_provider = get_embedding_provider()
     query_embedding = embedding_provider.embed_query(payload.question)
     distance = DocumentChunk.embedding.cosine_distance(query_embedding)
@@ -27,6 +29,7 @@ def retrieve_chunks(db: Session, payload: RetrievalRequest) -> RetrievalResponse
             joinedload(DocumentChunk.document).joinedload(Document.collection),
         )
         .where(DocumentChunk.embedding.is_not(None))
+        .where(Collection.tenant_id == tenant_id)
     )
 
     if payload.collection_id is not None:

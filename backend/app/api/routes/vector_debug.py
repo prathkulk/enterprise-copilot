@@ -9,6 +9,8 @@ from backend.app.db.session import get_db_session
 from backend.app.models.collection import Collection
 from backend.app.models.document import Document
 from backend.app.models.document_chunk import DocumentChunk
+from backend.app.models.user import User
+from backend.app.services.auth_service import get_current_user
 from backend.app.services.embeddings import EmbeddingProviderError, get_embedding_provider
 from backend.app.services.vector_search import find_similar_chunks
 
@@ -111,10 +113,14 @@ def _mock_chunks() -> list[MockChunkSeed]:
 
 
 @router.post("/seed", response_model=MockVectorSeedResponse, status_code=status.HTTP_201_CREATED)
-def seed_mock_vectors(db: Session = Depends(get_db_session)) -> MockVectorSeedResponse:
+def seed_mock_vectors(
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
+) -> MockVectorSeedResponse:
     timestamp = datetime.now(UTC).strftime("%Y%m%d%H%M%S")
 
     collection = Collection(
+        tenant_id=current_user.tenant_id,
         name=f"Vector Debug Collection {timestamp}",
         description="Temporary collection for pgvector similarity verification.",
     )
@@ -152,13 +158,16 @@ def seed_mock_vectors(db: Session = Depends(get_db_session)) -> MockVectorSeedRe
 
 @router.post("/query", response_model=list[SimilarityResult])
 def query_similar_chunks(
-    payload: SimilarityQueryRequest, db: Session = Depends(get_db_session)
+    payload: SimilarityQueryRequest,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
 ) -> list[SimilarityResult]:
     validate_embedding_size(payload.query_embedding)
     results = find_similar_chunks(
         db=db,
         query_embedding=payload.query_embedding,
         limit=payload.limit,
+        tenant_id=current_user.tenant_id,
     )
     return [
         SimilarityResult(
@@ -173,7 +182,10 @@ def query_similar_chunks(
 
 
 @router.post("/embeddings", response_model=EmbeddingDebugResponse)
-def debug_embeddings(payload: EmbeddingDebugRequest) -> EmbeddingDebugResponse:
+def debug_embeddings(
+    payload: EmbeddingDebugRequest,
+    _: User = Depends(get_current_user),
+) -> EmbeddingDebugResponse:
     try:
         embedding_provider = get_embedding_provider()
         document_embeddings = embedding_provider.embed_documents(payload.texts)

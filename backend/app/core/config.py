@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     llm_model: str = "gpt-5.4-mini"
     openai_api_key: str | None = None
     openai_base_url: str | None = None
+    auth_secret_key: str = "change-me-in-production"
+    auth_jwt_algorithm: str = "HS256"
+    auth_access_token_expire_minutes: int = 60
     local_storage_root: str = "data/uploads"
     chunk_size: int = 800
     chunk_overlap: int = 150

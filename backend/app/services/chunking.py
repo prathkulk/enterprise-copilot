@@ -28,9 +28,15 @@ class ChunkCandidate:
     overlap_from_previous_chars: int
 
 
-def chunk_document(db: Session, document_id: int) -> DocumentChunkingResponse:
-    document = _get_document_model(db, document_id)
-    extraction = extract_document_text(db, document_id)
+def chunk_document(
+    db: Session, document_id: int, tenant_id: int | None = None
+) -> DocumentChunkingResponse:
+    document = _get_document_model(db, document_id, tenant_id)
+    extraction = extract_document_text(
+        db,
+        document_id,
+        tenant_id if tenant_id is not None else document.collection.tenant_id,
+    )
     cleaned_text, page_spans = _strip_page_markers(extraction.extracted_text)
     candidates = _build_chunk_candidates(cleaned_text, page_spans)
 
@@ -238,12 +244,18 @@ def _resolve_page_reference(
     return unique_pages
 
 
-def _get_document_model(db: Session, document_id: int) -> Document:
+def _get_document_model(
+    db: Session, document_id: int, tenant_id: int | None = None
+) -> Document:
     statement = (
         select(Document)
         .where(Document.id == document_id)
         .options(selectinload(Document.collection), selectinload(Document.chunks))
     )
+    if tenant_id is not None:
+        statement = statement.join(Document.collection).where(
+            Document.collection.has(tenant_id=tenant_id)
+        )
     document = db.scalar(statement)
     if document is None:
         raise DocumentNotFoundError

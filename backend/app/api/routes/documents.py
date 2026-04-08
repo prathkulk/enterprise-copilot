@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.core.observability import get_request_id
 from backend.app.db.session import get_db_session
+from backend.app.models.user import User
 from backend.app.schemas.documents import (
     DocumentChunkingResponse,
     DocumentDetailResponse,
@@ -21,6 +22,7 @@ from backend.app.schemas.documents import (
     DocumentUploadResponse,
 )
 from backend.app.schemas.jobs import IngestionJobQueuedResponse
+from backend.app.services.auth_service import get_current_user
 from backend.app.services.chunking import chunk_document as chunk_document_record
 from backend.app.services.collection_service import CollectionNotFoundError
 from backend.app.services.document_service import (
@@ -54,9 +56,15 @@ def upload_document(
     collection_id: int,
     file: UploadFile = File(...),
     db: Session = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
 ):
     try:
-        return upload_document_record(db=db, collection_id=collection_id, file=file)
+        return upload_document_record(
+            db=db,
+            collection_id=collection_id,
+            file=file,
+            tenant_id=current_user.tenant_id,
+        )
     except CollectionNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -74,10 +82,16 @@ def upload_document(
     response_model=list[DocumentListItem],
 )
 def list_collection_documents(
-    collection_id: int, db: Session = Depends(get_db_session)
+    collection_id: int,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
 ):
     try:
-        return list_documents_for_collection_records(db=db, collection_id=collection_id)
+        return list_documents_for_collection_records(
+            db=db,
+            collection_id=collection_id,
+            tenant_id=current_user.tenant_id,
+        )
     except CollectionNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -86,9 +100,17 @@ def list_collection_documents(
 
 
 @router.get("/documents/{document_id}", response_model=DocumentDetailResponse)
-def get_document(document_id: int, db: Session = Depends(get_db_session)):
+def get_document(
+    document_id: int,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
+):
     try:
-        return get_document_detail_record(db=db, document_id=document_id)
+        return get_document_detail_record(
+            db=db,
+            document_id=document_id,
+            tenant_id=current_user.tenant_id,
+        )
     except DocumentNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -97,9 +119,17 @@ def get_document(document_id: int, db: Session = Depends(get_db_session)):
 
 
 @router.delete("/documents/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_document(document_id: int, db: Session = Depends(get_db_session)) -> Response:
+def delete_document(
+    document_id: int,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
+) -> Response:
     try:
-        delete_document_record(db=db, document_id=document_id)
+        delete_document_record(
+            db=db,
+            document_id=document_id,
+            tenant_id=current_user.tenant_id,
+        )
     except DocumentNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -112,9 +142,17 @@ def delete_document(document_id: int, db: Session = Depends(get_db_session)) -> 
     "/documents/{document_id}/extract",
     response_model=DocumentExtractionResponse,
 )
-def extract_document_text(document_id: int, db: Session = Depends(get_db_session)):
+def extract_document_text(
+    document_id: int,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
+):
     try:
-        return extract_document_text_record(db=db, document_id=document_id)
+        return extract_document_text_record(
+            db=db,
+            document_id=document_id,
+            tenant_id=current_user.tenant_id,
+        )
     except DocumentNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -131,9 +169,17 @@ def extract_document_text(document_id: int, db: Session = Depends(get_db_session
     "/documents/{document_id}/chunk",
     response_model=DocumentChunkingResponse,
 )
-def chunk_document(document_id: int, db: Session = Depends(get_db_session)):
+def chunk_document(
+    document_id: int,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
+):
     try:
-        return chunk_document_record(db=db, document_id=document_id)
+        return chunk_document_record(
+            db=db,
+            document_id=document_id,
+            tenant_id=current_user.tenant_id,
+        )
     except DocumentNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -151,9 +197,14 @@ def ingest_document(
     background_tasks: BackgroundTasks,
     request: Request,
     db: Session = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
 ):
     try:
-        job = queue_ingestion_job_record(db=db, document_id=document_id)
+        job = queue_ingestion_job_record(
+            db=db,
+            document_id=document_id,
+            tenant_id=current_user.tenant_id,
+        )
         background_tasks.add_task(
             run_ingestion_job,
             job.id,

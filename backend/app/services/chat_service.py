@@ -5,6 +5,7 @@ from pydantic import ValidationError
 from backend.app.models.chat_message import ChatMessage
 from backend.app.models.chat_session import ChatSession
 from backend.app.models.message_feedback import MessageFeedback
+from backend.app.models.user import User
 from backend.app.schemas.ask import AskRequest
 from backend.app.schemas.chat import (
     ChatMessageResponse,
@@ -33,11 +34,18 @@ class InvalidFeedbackTargetError(Exception):
     """Raised when feedback targets a non-assistant message."""
 
 
-def create_chat_session(db: Session, payload: ChatSessionCreate) -> ChatSessionResponse:
+def create_chat_session(
+    db: Session, payload: ChatSessionCreate, current_user: User
+) -> ChatSessionResponse:
     if payload.collection_id is not None:
-        get_collection(db, payload.collection_id)
+        get_collection(db, payload.collection_id, current_user.tenant_id)
 
-    session = ChatSession(title=payload.title, collection_id=payload.collection_id)
+    session = ChatSession(
+        tenant_id=current_user.tenant_id,
+        user_id=current_user.id,
+        title=payload.title,
+        collection_id=payload.collection_id,
+    )
     db.add(session)
     db.commit()
     db.refresh(session)
@@ -45,9 +53,9 @@ def create_chat_session(db: Session, payload: ChatSessionCreate) -> ChatSessionR
 
 
 def list_session_messages(
-    db: Session, session_id: int
+    db: Session, session_id: int, current_user: User
 ) -> ChatSessionMessagesResponse:
-    session = _get_chat_session(db, session_id)
+    session = _get_chat_session(db, session_id, current_user)
     statement = (
         select(ChatMessage)
         .where(ChatMessage.session_id == session_id)
@@ -61,9 +69,9 @@ def list_session_messages(
 
 
 def ask_within_session(
-    db: Session, session_id: int, payload: SessionAskRequest
+    db: Session, session_id: int, payload: SessionAskRequest, current_user: User
 ) -> SessionAskResponse:
-    session = _get_chat_session(db, session_id)
+    session = _get_chat_session(db, session_id, current_user)
     prior_messages = _list_session_message_models(db, session.id)
     effective_collection_id = payload.collection_id or session.collection_id
     try:
@@ -90,6 +98,7 @@ def ask_within_session(
     ask_execution = run_ask_question(
         payload=ask_payload,
         db=db,
+        tenant_id=current_user.tenant_id,
         retrieval_question=rewrite_result.rewritten_question,
     )
     ask_response = ask_execution.response
@@ -164,9 +173,9 @@ def ask_within_session(
 
 
 def submit_message_feedback(
-    db: Session, message_id: int, payload: MessageFeedbackCreate
+    db: Session, message_id: int, payload: MessageFeedbackCreate, current_user: User
 ) -> MessageFeedbackResponse:
-    message = _get_chat_message(db, message_id)
+    message = _get_chat_message(db, message_id, current_user)
     if message.role != "assistant":
         raise InvalidFeedbackTargetError
 
@@ -182,15 +191,26 @@ def submit_message_feedback(
     return _serialize_feedback(feedback)
 
 
-def _get_chat_session(db: Session, session_id: int) -> ChatSession:
-    session = db.get(ChatSession, session_id)
+def _get_chat_session(db: Session, session_id: int, current_user: User) -> ChatSession:
+    session = db.scalar(
+        select(ChatSession)
+        .where(ChatSession.id == session_id)
+        .where(ChatSession.tenant_id == current_user.tenant_id)
+        .where(ChatSession.user_id == current_user.id)
+    )
     if session is None:
         raise ChatSessionNotFoundError
     return session
 
 
-def _get_chat_message(db: Session, message_id: int) -> ChatMessage:
-    message = db.get(ChatMessage, message_id)
+def _get_chat_message(db: Session, message_id: int, current_user: User) -> ChatMessage:
+    message = db.scalar(
+        select(ChatMessage)
+        .join(ChatMessage.session)
+        .where(ChatMessage.id == message_id)
+        .where(ChatSession.tenant_id == current_user.tenant_id)
+        .where(ChatSession.user_id == current_user.id)
+    )
     if message is None:
         raise ChatMessageNotFoundError
     return message

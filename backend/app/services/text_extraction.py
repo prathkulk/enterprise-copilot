@@ -23,8 +23,10 @@ class DocumentExtractionNotAvailableError(Exception):
     """Raised when extraction cannot proceed for the requested document."""
 
 
-def extract_document_text(db: Session, document_id: int) -> DocumentExtractionResponse:
-    document = _get_document_model(db, document_id)
+def extract_document_text(
+    db: Session, document_id: int, tenant_id: int
+) -> DocumentExtractionResponse:
+    document = _get_document_model(db, document_id, tenant_id)
     parser = PARSERS_BY_SOURCE_TYPE.get(document.source_type)
     if parser is None:
         raise DocumentExtractionNotAvailableError(
@@ -57,10 +59,12 @@ def extract_document_text(db: Session, document_id: int) -> DocumentExtractionRe
     )
 
 
-def _get_document_model(db: Session, document_id: int) -> Document:
+def _get_document_model(db: Session, document_id: int, tenant_id: int) -> Document:
     statement = (
         select(Document)
         .where(Document.id == document_id)
+        .join(Document.collection)
+        .where(Document.collection.has(tenant_id=tenant_id))
         .options(selectinload(Document.collection), selectinload(Document.chunks))
     )
     document = db.scalar(statement)

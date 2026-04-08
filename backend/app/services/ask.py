@@ -25,12 +25,15 @@ class AskExecutionResult(NamedTuple):
     retrieval_question: str
 
 
-def ask_question(payload: AskRequest, db: Session) -> AskResponse:
-    return run_ask_question(payload=payload, db=db).response
+def ask_question(payload: AskRequest, db: Session, tenant_id: int) -> AskResponse:
+    return run_ask_question(payload=payload, db=db, tenant_id=tenant_id).response
 
 
 def run_ask_question(
-    payload: AskRequest, db: Session, retrieval_question: str | None = None
+    payload: AskRequest,
+    db: Session,
+    tenant_id: int,
+    retrieval_question: str | None = None,
 ) -> AskExecutionResult:
     embedding_provider = get_embedding_provider()
     llm_provider = get_llm_provider()
@@ -53,7 +56,11 @@ def run_ask_question(
 
     try:
         retrieval_started_at = perf_counter()
-        retrieval_response = retrieve_chunks(db=db, payload=retrieval_request)
+        retrieval_response = retrieve_chunks(
+            db=db,
+            payload=retrieval_request,
+            tenant_id=tenant_id,
+        )
         retrieval_duration_ms = round((perf_counter() - retrieval_started_at) * 1000, 3)
         log_event(
             logger,

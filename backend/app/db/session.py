@@ -16,6 +16,8 @@ from backend.app.models import (
     document_chunk,
     ingestion_job,
     message_feedback,
+    tenant,
+    user,
 )
 
 settings = get_settings()
@@ -90,9 +92,43 @@ def ensure_vector_schema() -> None:
             )
 
 
+def ensure_multitenant_schema() -> None:
+    with engine.begin() as connection:
+        connection.execute(
+            text("ALTER TABLE collections ADD COLUMN IF NOT EXISTS tenant_id INTEGER")
+        )
+        connection.execute(
+            text("ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS tenant_id INTEGER")
+        )
+        connection.execute(
+            text("ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS user_id INTEGER")
+        )
+        connection.execute(
+            text("ALTER TABLE collections DROP CONSTRAINT IF EXISTS collections_name_key")
+        )
+        connection.execute(
+            text(
+                """
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (
+                        SELECT 1
+                        FROM pg_constraint
+                        WHERE conname = 'uq_collections_tenant_name'
+                    ) THEN
+                        ALTER TABLE collections
+                        ADD CONSTRAINT uq_collections_tenant_name UNIQUE (tenant_id, name);
+                    END IF;
+                END$$;
+                """
+            )
+        )
+
+
 def initialize_database() -> None:
     initialize_pgvector()
     Base.metadata.create_all(bind=engine)
+    ensure_multitenant_schema()
     ensure_vector_schema()
 
 
