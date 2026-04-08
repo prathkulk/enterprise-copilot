@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     postgres_host: str = "localhost"
     postgres_port: int = 5432
     database_url: str | None = None
+    embedding_provider: str = "mock"
     embedding_dimensions: int = 8
     local_storage_root: str = "data/uploads"
     chunk_size: int = 800

@@ -9,9 +9,11 @@ from backend.app.db.session import get_db_session
 from backend.app.models.collection import Collection
 from backend.app.models.document import Document
 from backend.app.models.document_chunk import DocumentChunk
+from backend.app.services.embeddings import get_embedding_provider
 from backend.app.services.vector_search import find_similar_chunks
 
 settings = get_settings()
+embedding_provider = get_embedding_provider()
 
 router = APIRouter(prefix="/debug/vector-search", tags=["debug"])
 
@@ -39,6 +41,18 @@ class SimilarityResult(BaseModel):
     chunk_index: int
     text: str
     distance: float
+
+
+class EmbeddingDebugRequest(BaseModel):
+    texts: list[str] = Field(min_length=1, max_length=10)
+    query_text: str | None = None
+
+
+class EmbeddingDebugResponse(BaseModel):
+    provider: str
+    dimensions: int
+    document_embeddings: list[list[float]]
+    query_embedding: list[float] | None
 
 
 DEFAULT_MOCK_CHUNKS = [
@@ -131,3 +145,19 @@ def query_similar_chunks(
         )
         for chunk, distance in results
     ]
+
+
+@router.post("/embeddings", response_model=EmbeddingDebugResponse)
+def debug_embeddings(payload: EmbeddingDebugRequest) -> EmbeddingDebugResponse:
+    document_embeddings = embedding_provider.embed_documents(payload.texts)
+    query_embedding = (
+        embedding_provider.embed_query(payload.query_text)
+        if payload.query_text is not None
+        else None
+    )
+    return EmbeddingDebugResponse(
+        provider=embedding_provider.provider_name,
+        dimensions=settings.embedding_dimensions,
+        document_embeddings=document_embeddings,
+        query_embedding=query_embedding,
+    )
