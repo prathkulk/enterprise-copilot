@@ -11,6 +11,8 @@ This initial commit sets up:
 - Starter router registration
 - Health and version endpoints
 - CORS middleware configuration
+- Docker-based local development stack
+- PostgreSQL service for local development
 
 ## Project structure
 
@@ -25,7 +27,10 @@ This initial commit sets up:
 │   │   ├── core
 │   │   │   └── config.py
 │   │   └── main.py
+│   ├── .dockerignore
+│   ├── Dockerfile
 │   └── requirements.txt
+├── docker-compose.yml
 ├── .env.example
 └── README.md
 ```
@@ -56,6 +61,39 @@ This initial commit sets up:
    ```bash
    uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8000
    ```
+
+## Docker setup
+
+1. Copy the example environment file:
+
+   ```bash
+   cp .env.example .env
+   ```
+
+2. Start the local stack:
+
+   ```bash
+   docker compose up --build
+   ```
+
+3. Visit the running API:
+
+   ```text
+   http://127.0.0.1:8000/health
+   http://127.0.0.1:8000/version
+   http://127.0.0.1:8000/docs
+   ```
+
+The compose stack includes:
+
+- `backend` running FastAPI with source mounted for live local development
+- `postgres` running PostgreSQL 16 with a persistent named volume
+
+To stop the stack:
+
+```bash
+docker compose down
+```
 
 ## Endpoints
 

@@ -1,7 +1,9 @@
+from typing import Annotated
+
 from functools import lru_cache
 
 from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -10,7 +12,13 @@ class Settings(BaseSettings):
     app_version: str = "0.1.0"
     app_host: str = "0.0.0.0"
     app_port: int = 8000
-    backend_cors_origins: list[str] = Field(
+    postgres_db: str = "enterprise_copilot"
+    postgres_user: str = "postgres"
+    postgres_password: str = "postgres"
+    postgres_host: str = "localhost"
+    postgres_port: int = 5432
+    database_url: str | None = None
+    backend_cors_origins: Annotated[list[str], NoDecode] = Field(
         default_factory=lambda: [
             "http://localhost:3000",
             "http://127.0.0.1:3000",
@@ -31,6 +39,15 @@ class Settings(BaseSettings):
         if isinstance(value, str):
             return [origin.strip() for origin in value.split(",") if origin.strip()]
         return []
+
+    @property
+    def resolved_database_url(self) -> str:
+        if self.database_url:
+            return self.database_url
+        return (
+            f"postgresql://{self.postgres_user}:{self.postgres_password}"
+            f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+        )
 
 
 @lru_cache(maxsize=1)
