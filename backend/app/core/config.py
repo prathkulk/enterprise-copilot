@@ -1,6 +1,7 @@
 from typing import Annotated
 
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
@@ -19,6 +20,7 @@ class Settings(BaseSettings):
     postgres_port: int = 5432
     database_url: str | None = None
     embedding_dimensions: int = 8
+    local_storage_root: str = "data/uploads"
     backend_cors_origins: Annotated[list[str], NoDecode] = Field(
         default_factory=lambda: [
             "http://localhost:3000",
@@ -55,6 +57,10 @@ class Settings(BaseSettings):
             f"postgresql://{self.postgres_user}:{self.postgres_password}"
             f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
         ).replace("postgresql://", "postgresql+psycopg://", 1)
+
+    @property
+    def resolved_storage_root(self) -> Path:
+        return Path(self.local_storage_root).expanduser().resolve()
 
 
 @lru_cache(maxsize=1)

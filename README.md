@@ -15,6 +15,7 @@ This initial commit sets up:
 - PostgreSQL service for local development
 - SQLAlchemy ORM, session management, and initial relational models
 - pgvector extension support and vector-ready chunk embeddings
+- document upload endpoint with local filesystem storage
 
 ## Project structure
 
@@ -25,6 +26,7 @@ This initial commit sets up:
 │   │   ├── api
 │   │   │   ├── routes
 │   │   │   │   ├── collections.py
+│   │   │   │   ├── documents.py
 │   │   │   │   ├── system.py
 │   │   │   │   └── vector_debug.py
 │   │   │   └── router.py
@@ -39,6 +41,8 @@ This initial commit sets up:
 │   │   │   ├── document_chunk.py
 │   │   │   └── ingestion_job.py
 │   │   ├── services
+│   │   │   ├── document_service.py
+│   │   │   ├── storage.py
 │   │   │   └── vector_search.py
 │   │   └── main.py
 │   ├── Dockerfile
@@ -122,6 +126,7 @@ docker compose down
 - `GET /collections/{collection_id}` fetches a collection row back by id.
 - `PATCH /collections/{collection_id}` updates a collection.
 - `DELETE /collections/{collection_id}` deletes a collection.
+- `POST /collections/{collection_id}/documents/upload` uploads a PDF, DOCX, or TXT file.
 - `POST /debug/vector-search/seed` inserts mock chunk rows with fake embeddings.
 - `POST /debug/vector-search/query` runs a temporary top-k similarity search.
 
@@ -139,6 +144,13 @@ Then fetch it back:
 
 ```bash
 curl http://127.0.0.1:8000/collections/1
+```
+
+To upload a document into a collection:
+
+```bash
+curl -X POST http://127.0.0.1:8000/collections/1/documents/upload \
+  -F "file=@/path/to/sample.txt"
 ```
 
 The backend currently creates these relational tables:
