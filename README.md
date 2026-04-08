@@ -21,6 +21,7 @@ This initial commit sets up:
 - semantic chunking pipeline with configurable overlap
 - embedding provider abstraction with deterministic mock embeddings
 - end-to-end ingestion pipeline for extract, chunk, and embed
+- top-k semantic retrieval service with collection/document filters
 
 ## Project structure
 
@@ -32,6 +33,7 @@ This initial commit sets up:
 │   │   │   ├── routes
 │   │   │   │   ├── collections.py
 │   │   │   │   ├── documents.py
+│   │   │   │   ├── retrieval.py
 │   │   │   │   ├── system.py
 │   │   │   │   └── vector_debug.py
 │   │   │   └── router.py
@@ -52,6 +54,7 @@ This initial commit sets up:
 │   │   │   ├── document_service.py
 │   │   │   ├── embeddings.py
 │   │   │   ├── ingestion.py
+│   │   │   ├── retrieval.py
 │   │   │   ├── storage.py
 │   │   │   ├── text_extraction.py
 │   │   │   └── vector_search.py
@@ -144,6 +147,7 @@ docker compose down
 - `POST /documents/{document_id}/extract` runs temporary raw-text extraction for an uploaded document.
 - `POST /documents/{document_id}/chunk` runs temporary chunk generation and stores chunk rows.
 - `POST /documents/{document_id}/ingest` runs extraction, chunking, embedding, and indexing in one step.
+- `POST /retrieve` embeds a question and returns top-k semantic chunk matches.
 - `POST /debug/vector-search/embeddings` returns deterministic mock embeddings for debug verification.
 - `POST /debug/vector-search/seed` inserts mock chunk rows with fake embeddings.
 - `POST /debug/vector-search/query` runs a temporary top-k similarity search.
@@ -267,6 +271,22 @@ Expected behavior:
 - chunk rows are created
 - embeddings are saved on chunks
 - final document status becomes `indexed`
+
+## Retrieval Verification
+
+After indexing a few topic-specific documents, call:
+
+```bash
+curl -X POST http://127.0.0.1:8000/retrieve \
+  -H "Content-Type: application/json" \
+  -d '{"question":"Which document talks about finance forecasting?","collection_id":1,"top_k":3}'
+```
+
+The response returns:
+
+- ranked chunks
+- `score`
+- citation metadata including collection, document, chunk index, page reference, and offsets
 
 ## Quick test
 
