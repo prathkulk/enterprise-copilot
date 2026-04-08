@@ -22,6 +22,7 @@ This initial commit sets up:
 - embedding provider abstraction with deterministic mock embeddings
 - end-to-end ingestion pipeline for extract, chunk, and embed
 - top-k semantic retrieval service with collection/document filters
+- grounded answer generation with citation formatting and insufficient-evidence fallback
 
 ## Project structure
 
@@ -47,13 +48,20 @@ This initial commit sets up:
 │   │   │   ├── document.py
 │   │   │   ├── document_chunk.py
 │   │   │   └── ingestion_job.py
+│   │   ├── schemas
+│   │   │   ├── answers.py
+│   │   │   ├── collections.py
+│   │   │   ├── documents.py
+│   │   │   └── retrieval.py
 │   │   ├── services
+│   │   │   ├── answer_generation.py
 │   │   │   ├── chunking.py
 │   │   │   ├── collection_service.py
 │   │   │   ├── document_parsers.py
 │   │   │   ├── document_service.py
 │   │   │   ├── embeddings.py
 │   │   │   ├── ingestion.py
+│   │   │   ├── llm.py
 │   │   │   ├── retrieval.py
 │   │   │   ├── storage.py
 │   │   │   ├── text_extraction.py
@@ -148,6 +156,7 @@ docker compose down
 - `POST /documents/{document_id}/chunk` runs temporary chunk generation and stores chunk rows.
 - `POST /documents/{document_id}/ingest` runs extraction, chunking, embedding, and indexing in one step.
 - `POST /retrieve` embeds a question and returns top-k semantic chunk matches.
+- `POST /answer` retrieves supporting chunks and returns a grounded answer with inline citations.
 - `POST /debug/vector-search/embeddings` returns deterministic mock embeddings for debug verification.
 - `POST /debug/vector-search/seed` inserts mock chunk rows with fake embeddings.
 - `POST /debug/vector-search/query` runs a temporary top-k similarity search.
@@ -191,6 +200,7 @@ The backend currently creates these relational tables:
 `document_chunks.embedding` is stored as a `VECTOR(8)` placeholder column for vector retrieval development.
 Chunking defaults are driven by config: `chunk_size=800`, `chunk_overlap=150`, `chunk_min_length=120`.
 Embedding generation is provider-driven via config and defaults to the deterministic `mock` provider for local development.
+Answer generation is provider-driven via config and defaults to the deterministic `mock` provider for local development.
 Document statuses currently move through `uploaded`, `processing`, `indexed`, and `failed`.
 
 ## Vector verification
@@ -287,6 +297,22 @@ The response returns:
 - ranked chunks
 - `score`
 - citation metadata including collection, document, chunk index, page reference, and offsets
+
+## Answer Verification
+
+After indexing a few topic-specific documents, call:
+
+```bash
+curl -X POST http://127.0.0.1:8000/answer \
+  -H "Content-Type: application/json" \
+  -d '{"question":"How should finance teams forecast quarterly cash flow?","collection_id":1,"top_k":3}'
+```
+
+Expected behavior:
+
+- the answer is grounded in retrieved chunk text
+- inline citations such as `[1]` map to real chunk and document references
+- irrelevant questions return an insufficient-evidence response
 
 ## Quick test
 

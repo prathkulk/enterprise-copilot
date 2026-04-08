@@ -21,10 +21,13 @@ class Settings(BaseSettings):
     database_url: str | None = None
     embedding_provider: str = "mock"
     embedding_dimensions: int = 8
+    llm_provider: str = "mock"
     local_storage_root: str = "data/uploads"
     chunk_size: int = 800
     chunk_overlap: int = 150
     chunk_min_length: int = 120
+    answer_min_score: float = 0.2
+    answer_max_citations: int = 2
     backend_cors_origins: Annotated[list[str], NoDecode] = Field(
         default_factory=lambda: [
             "http://localhost:3000",
