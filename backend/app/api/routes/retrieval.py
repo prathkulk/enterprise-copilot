@@ -7,6 +7,7 @@ from backend.app.schemas.answers import AnswerRequest, AnswerResponse
 from backend.app.schemas.retrieval import RetrievalRequest, RetrievalResponse
 from backend.app.services.ask import ask_question
 from backend.app.services.answer_generation import generate_answer
+from backend.app.services.embeddings import EmbeddingProviderError
 from backend.app.services.llm import LLMProviderError
 from backend.app.services.retrieval import retrieve_chunks
 
@@ -15,16 +16,22 @@ router = APIRouter(tags=["retrieval"])
 
 @router.post("/retrieve", response_model=RetrievalResponse)
 def retrieve(payload: RetrievalRequest, db: Session = Depends(get_db_session)):
-    return retrieve_chunks(db=db, payload=payload)
+    try:
+        return retrieve_chunks(db=db, payload=payload)
+    except EmbeddingProviderError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
 
 
 @router.post("/answer", response_model=AnswerResponse)
 def answer(payload: AnswerRequest, db: Session = Depends(get_db_session)):
     try:
         return generate_answer(payload=payload, db=db)
-    except LLMProviderError as exc:
+    except (EmbeddingProviderError, LLMProviderError) as exc:
         raise HTTPException(
-            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=str(exc),
         ) from exc
 
@@ -33,8 +40,8 @@ def answer(payload: AnswerRequest, db: Session = Depends(get_db_session)):
 def ask(payload: AskRequest, db: Session = Depends(get_db_session)):
     try:
         return ask_question(payload=payload, db=db)
-    except LLMProviderError as exc:
+    except (EmbeddingProviderError, LLMProviderError) as exc:
         raise HTTPException(
-            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=str(exc),
         ) from exc

@@ -16,6 +16,8 @@ from backend.app.services.retrieval import retrieve_chunks
 
 
 def ask_question(payload: AskRequest, db: Session) -> AskResponse:
+    embedding_provider = get_embedding_provider()
+    llm_provider = get_llm_provider()
     total_started_at = perf_counter()
 
     retrieval_started_at = perf_counter()
@@ -54,7 +56,9 @@ def ask_question(payload: AskRequest, db: Session) -> AskResponse:
             answer_generation_ms=answer_duration_ms,
         ),
         providers=AskProviderMetadata(
-            embedding_provider=get_embedding_provider().provider_name,
-            llm_provider=get_llm_provider().provider_name,
+            embedding_provider=embedding_provider.provider_name,
+            embedding_model=embedding_provider.model_name,
+            llm_provider=llm_provider.provider_name,
+            llm_model=llm_provider.model_name,
         ),
     )

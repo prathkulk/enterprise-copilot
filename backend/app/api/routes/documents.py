@@ -20,6 +20,7 @@ from backend.app.services.document_service import (
     list_documents_for_collection as list_documents_for_collection_records,
     upload_document as upload_document_record,
 )
+from backend.app.services.embeddings import EmbeddingProviderError
 from backend.app.services.ingestion import ingest_document as ingest_document_record
 from backend.app.services.text_extraction import (
     DocumentExtractionNotAvailableError,
@@ -136,4 +137,9 @@ def ingest_document(document_id: int, db: Session = Depends(get_db_session)):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Document not found",
+        ) from exc
+    except EmbeddingProviderError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
         ) from exc

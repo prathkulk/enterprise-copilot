@@ -1,4 +1,5 @@
 from collections.abc import Generator
+import re
 
 import psycopg
 from pgvector.psycopg import register_vector
@@ -10,6 +11,7 @@ from backend.app.db.base import Base
 from backend.app.models import collection, document, document_chunk, ingestion_job
 
 settings = get_settings()
+VECTOR_TYPE_PATTERN = re.compile(r"^vector\((\d+)\)$")
 
 engine = create_engine(settings.resolved_database_url, pool_pre_ping=True)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, class_=Session)
@@ -35,9 +37,49 @@ def ensure_vector_schema() -> None:
         connection.execute(
             text(
                 "ALTER TABLE document_chunks "
-                f"ADD COLUMN IF NOT EXISTS embedding vector({settings.embedding_dimensions})"
+                f"ADD COLUMN IF NOT EXISTS embedding vector({settings.resolved_embedding_dimensions})"
             )
         )
+        current_type = connection.execute(
+            text(
+                """
+                SELECT format_type(a.atttypid, a.atttypmod)
+                FROM pg_attribute AS a
+                JOIN pg_class AS c ON a.attrelid = c.oid
+                WHERE c.relname = 'document_chunks'
+                  AND a.attname = 'embedding'
+                  AND a.attnum > 0
+                  AND NOT a.attisdropped
+                """
+            )
+        ).scalar_one_or_none()
+
+        expected_type = f"vector({settings.resolved_embedding_dimensions})"
+        if current_type == expected_type:
+            return
+
+        if current_type is not None and VECTOR_TYPE_PATTERN.match(current_type):
+            connection.execute(
+                text(
+                    """
+                    UPDATE documents
+                    SET status = 'uploaded'
+                    WHERE id IN (
+                        SELECT DISTINCT document_id
+                        FROM document_chunks
+                        WHERE embedding IS NOT NULL
+                    )
+                    """
+                )
+            )
+            connection.execute(text("UPDATE document_chunks SET embedding = NULL"))
+            connection.execute(
+                text(
+                    "ALTER TABLE document_chunks "
+                    f"ALTER COLUMN embedding TYPE vector({settings.resolved_embedding_dimensions}) "
+                    f"USING NULL::vector({settings.resolved_embedding_dimensions})"
+                )
+            )
 
 
 def initialize_database() -> None:

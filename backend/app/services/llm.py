@@ -1,4 +1,6 @@
 from abc import ABC, abstractmethod
+from functools import lru_cache
+import os
 import re
 from typing import Sequence
 
@@ -27,6 +29,7 @@ class LLMProviderError(Exception):
 
 class LLMProvider(ABC):
     provider_name: str
+    model_name: str
 
     @abstractmethod
     def generate_answer_sections(
@@ -41,6 +44,7 @@ class LLMProvider(ABC):
 
 class MockLLMProvider(LLMProvider):
     provider_name = "mock"
+    model_name = "mock-answer-v1"
 
     def generate_answer_sections(
         self,
@@ -81,8 +85,56 @@ class MockLLMProvider(LLMProvider):
         return sections
 
 
+class OpenAILLMProvider(LLMProvider):
+    provider_name = "openai"
+    model_name = settings.llm_model
+
+    def __init__(self) -> None:
+        self._client = None
+
+    def _get_client(self):
+        if self._client is not None:
+            return self._client
+
+        api_key = settings.openai_api_key or os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            raise LLMProviderError("OPENAI_API_KEY is not configured.")
+
+        from openai import OpenAI
+
+        client_kwargs = {"api_key": api_key}
+        if settings.openai_base_url:
+            client_kwargs["base_url"] = settings.openai_base_url
+        self._client = OpenAI(**client_kwargs)
+        return self._client
+
+    def generate_answer_sections(
+        self,
+        *,
+        prompt: str,
+        question: str,
+        chunks: Sequence[RetrievedChunk],
+    ) -> list[str]:
+        del question, chunks
+
+        response = self._get_client().responses.create(
+            model=settings.llm_model,
+            input=prompt,
+        )
+        output_text = response.output_text.strip()
+        if not output_text:
+            raise LLMProviderError("OpenAI response did not contain text output.")
+
+        return [
+            section.strip()
+            for section in re.split(r"\n\s*\n+", output_text)
+            if section.strip()
+        ]
+
+
 class PlaceholderLLMProvider(LLMProvider):
     provider_name = "placeholder"
+    model_name = "unconfigured"
 
     def generate_answer_sections(
         self,
@@ -95,9 +147,11 @@ class PlaceholderLLMProvider(LLMProvider):
         raise LLMProviderError("Real LLM provider integration is not configured yet.")
 
 
+@lru_cache(maxsize=1)
 def get_llm_provider() -> LLMProvider:
     providers: dict[str, LLMProvider] = {
+        "openai": OpenAILLMProvider(),
         "mock": MockLLMProvider(),
         "placeholder": PlaceholderLLMProvider(),
     }
-    return providers.get(settings.llm_provider, MockLLMProvider())
+    return providers.get(settings.llm_provider, OpenAILLMProvider())

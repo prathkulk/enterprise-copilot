@@ -21,7 +21,7 @@ class DocumentChunk(TimestampMixin, BaseModel):
     text: Mapped[str] = mapped_column(Text, nullable=False)
     metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     embedding: Mapped[list[float] | None] = mapped_column(
-        Vector(settings.embedding_dimensions), nullable=True
+        Vector(settings.resolved_embedding_dimensions), nullable=True
     )
 
     document = relationship("Document", back_populates="chunks")

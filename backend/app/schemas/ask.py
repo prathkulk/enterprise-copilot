@@ -16,7 +16,9 @@ class AskLatency(BaseModel):
 
 class AskProviderMetadata(BaseModel):
     embedding_provider: str
+    embedding_model: str
     llm_provider: str
+    llm_model: str
 
 
 class AskResponse(BaseModel):

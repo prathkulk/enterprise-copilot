@@ -6,6 +6,11 @@ from pathlib import Path
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
+OPENAI_EMBEDDING_DIMENSIONS = {
+    "text-embedding-3-small": 1536,
+    "text-embedding-3-large": 3072,
+}
+
 
 class Settings(BaseSettings):
     app_name: str = "Enterprise Copilot API"
@@ -19,9 +24,13 @@ class Settings(BaseSettings):
     postgres_host: str = "localhost"
     postgres_port: int = 5432
     database_url: str | None = None
-    embedding_provider: str = "mock"
-    embedding_dimensions: int = 8
-    llm_provider: str = "mock"
+    embedding_provider: str = "openai"
+    embedding_model: str = "text-embedding-3-small"
+    embedding_dimensions: int | None = None
+    llm_provider: str = "openai"
+    llm_model: str = "gpt-5.4-mini"
+    openai_api_key: str | None = None
+    openai_base_url: str | None = None
     local_storage_root: str = "data/uploads"
     chunk_size: int = 800
     chunk_overlap: int = 150
@@ -64,6 +73,14 @@ class Settings(BaseSettings):
             f"postgresql://{self.postgres_user}:{self.postgres_password}"
             f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
         ).replace("postgresql://", "postgresql+psycopg://", 1)
+
+    @property
+    def resolved_embedding_dimensions(self) -> int:
+        if self.embedding_dimensions is not None:
+            return self.embedding_dimensions
+        if self.embedding_provider == "openai":
+            return OPENAI_EMBEDDING_DIMENSIONS.get(self.embedding_model, 1536)
+        return 8
 
     @property
     def resolved_storage_root(self) -> Path:

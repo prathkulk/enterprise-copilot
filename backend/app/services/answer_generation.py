@@ -9,7 +9,6 @@ from backend.app.services.llm import get_llm_provider
 from backend.app.services.retrieval import retrieve_chunks
 
 settings = get_settings()
-llm_provider = get_llm_provider()
 
 INSUFFICIENT_EVIDENCE_ANSWER = (
     "I do not have enough evidence in the indexed documents to answer that confidently."
@@ -49,7 +48,9 @@ def build_answer_prompt(question: str, chunks: list[RetrievedChunk]) -> str:
     sources = "\n\n".join(source_blocks)
     return (
         "You are a grounded answer generator. Use only the provided sources. "
-        "If the evidence is weak or missing, say that there is insufficient evidence.\n\n"
+        "Answer in 1-3 concise sentences, do not invent facts, and do not include citation "
+        "markers because they are added by the server. If the evidence is weak or missing, "
+        "say that there is insufficient evidence.\n\n"
         f"Question: {question}\n\n"
         f"Sources:\n{sources}"
     )
@@ -125,7 +126,7 @@ def generate_answer_from_chunks(
         )
 
     prompt = build_answer_prompt(question, supporting_chunks)
-    sections = llm_provider.generate_answer_sections(
+    sections = get_llm_provider().generate_answer_sections(
         prompt=prompt,
         question=question,
         chunks=supporting_chunks,

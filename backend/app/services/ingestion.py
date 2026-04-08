@@ -12,8 +12,6 @@ from backend.app.services.chunking import chunk_document
 from backend.app.services.document_service import DocumentNotFoundError
 from backend.app.services.embeddings import get_embedding_provider
 
-embedding_provider = get_embedding_provider()
-
 
 def ingest_document(db: Session, document_id: int) -> DocumentIngestionResponse:
     document = _get_document(db, document_id)
@@ -36,6 +34,7 @@ def ingest_document(db: Session, document_id: int) -> DocumentIngestionResponse:
             )
         )
 
+        embedding_provider = get_embedding_provider()
         embeddings = embedding_provider.embed_documents([chunk.text for chunk in chunk_rows])
         for chunk, embedding in zip(chunk_rows, embeddings, strict=False):
             chunk.embedding = embedding

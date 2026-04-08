@@ -11,10 +11,9 @@ from backend.app.schemas.retrieval import (
 )
 from backend.app.services.embeddings import get_embedding_provider
 
-embedding_provider = get_embedding_provider()
-
 
 def retrieve_chunks(db: Session, payload: RetrievalRequest) -> RetrievalResponse:
+    embedding_provider = get_embedding_provider()
     query_embedding = embedding_provider.embed_query(payload.question)
     distance = DocumentChunk.embedding.cosine_distance(query_embedding)
 

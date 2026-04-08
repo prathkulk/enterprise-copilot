@@ -19,7 +19,7 @@ This initial commit sets up:
 - document list, detail, and delete APIs
 - text extraction pipeline for TXT, PDF, and DOCX
 - semantic chunking pipeline with configurable overlap
-- embedding provider abstraction with deterministic mock embeddings
+- OpenAI-backed embedding provider support
 - end-to-end ingestion pipeline for extract, chunk, and embed
 - top-k semantic retrieval service with collection/document filters
 - grounded answer generation with citation formatting and insufficient-evidence fallback
@@ -93,10 +93,14 @@ This initial commit sets up:
    pip install -r backend/requirements.txt
    ```
 
-3. Copy the example environment file:
+3. Create a `.env` file with at least:
 
    ```bash
-   cp .env.example .env
+   OPENAI_API_KEY=your_api_key_here
+   EMBEDDING_PROVIDER=openai
+   EMBEDDING_MODEL=text-embedding-3-small
+   LLM_PROVIDER=openai
+   LLM_MODEL=gpt-5.4-mini
    ```
 
 4. Start the API:
@@ -107,11 +111,7 @@ This initial commit sets up:
 
 ## Docker setup
 
-1. Copy the example environment file:
-
-   ```bash
-   cp .env.example .env
-   ```
+1. Create a `.env` file with your OpenAI and database settings.
 
 2. Start the local stack:
 
@@ -201,11 +201,12 @@ The backend currently creates these relational tables:
 - `document_chunks`
 - `ingestion_jobs`
 
-`document_chunks.embedding` is stored as a `VECTOR(8)` placeholder column for vector retrieval development.
+`document_chunks.embedding` is stored as a `VECTOR(n)` column sized to the active embedding model.
 Chunking defaults are driven by config: `chunk_size=800`, `chunk_overlap=150`, `chunk_min_length=120`.
-Embedding generation is provider-driven via config and defaults to the deterministic `mock` provider for local development.
-Answer generation is provider-driven via config and defaults to the deterministic `mock` provider for local development.
+Embedding generation is provider-driven via config and now defaults to `openai` with `text-embedding-3-small`.
+Answer generation is provider-driven via config and now defaults to `openai` with `gpt-5.4-mini`.
 Document statuses currently move through `uploaded`, `processing`, `indexed`, and `failed`.
+If you change embedding models or dimensions, existing stored embeddings are cleared and affected documents are marked `uploaded` so they can be re-ingested.
 
 ## Vector verification
 
@@ -264,11 +265,11 @@ curl -X POST http://127.0.0.1:8000/debug/vector-search/embeddings \
   -d '{"texts":["same text","same text","different text"],"query_text":"same text"}'
 ```
 
-For the mock provider:
+For the configured provider:
 
-- repeated input returns the same embedding
+- repeated input returns the same embedding values for deterministic providers
 - different text returns a different vector
-- vector length matches `embedding_dimensions`
+- vector length matches the configured embedding dimensions
 
 ## Ingestion Verification
 
