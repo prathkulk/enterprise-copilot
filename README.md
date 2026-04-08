@@ -13,6 +13,7 @@ This initial commit sets up:
 - CORS middleware configuration
 - Docker-based local development stack
 - PostgreSQL service for local development
+- SQLAlchemy ORM, session management, and initial relational models
 
 ## Project structure
 
@@ -22,14 +23,23 @@ This initial commit sets up:
 │   ├── app
 │   │   ├── api
 │   │   │   ├── routes
+│   │   │   │   ├── collections.py
 │   │   │   │   └── system.py
 │   │   │   └── router.py
 │   │   ├── core
 │   │   │   └── config.py
+│   │   ├── db
+│   │   │   ├── base.py
+│   │   │   └── session.py
+│   │   ├── models
+│   │   │   ├── collection.py
+│   │   │   ├── document.py
+│   │   │   ├── document_chunk.py
+│   │   │   └── ingestion_job.py
 │   │   └── main.py
-│   ├── .dockerignore
 │   ├── Dockerfile
 │   └── requirements.txt
+├── .dockerignore
 ├── docker-compose.yml
 ├── .env.example
 └── README.md
@@ -89,6 +99,8 @@ The compose stack includes:
 - `backend` running FastAPI with source mounted for live local development
 - `postgres` running PostgreSQL 16 with a persistent named volume
 
+On startup, the API creates the current SQLAlchemy tables automatically for local development.
+
 To stop the stack:
 
 ```bash
@@ -100,6 +112,31 @@ docker compose down
 - `GET /health` returns a basic service health payload.
 - `GET /version` returns the API version payload.
 - `GET /docs` opens the Swagger UI.
+- `POST /collections` creates a collection row in PostgreSQL.
+- `GET /collections/{collection_id}` fetches a collection row back by id.
+
+## Database verification
+
+With the stack running, create a collection:
+
+```bash
+curl -X POST http://127.0.0.1:8000/collections \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Demo Collection","description":"Temporary verification collection"}'
+```
+
+Then fetch it back:
+
+```bash
+curl http://127.0.0.1:8000/collections/1
+```
+
+The backend currently creates these relational tables:
+
+- `collections`
+- `documents`
+- `document_chunks`
+- `ingestion_jobs`
 
 ## Quick test
 

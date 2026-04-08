@@ -43,11 +43,17 @@ class Settings(BaseSettings):
     @property
     def resolved_database_url(self) -> str:
         if self.database_url:
+            if self.database_url.startswith("postgresql://"):
+                return self.database_url.replace(
+                    "postgresql://",
+                    "postgresql+psycopg://",
+                    1,
+                )
             return self.database_url
         return (
             f"postgresql://{self.postgres_user}:{self.postgres_password}"
             f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
-        )
+        ).replace("postgresql://", "postgresql+psycopg://", 1)
 
 
 @lru_cache(maxsize=1)
