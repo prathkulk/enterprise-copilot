@@ -50,3 +50,14 @@ class LocalFileStorage:
             content_type=file.content_type or "application/octet-stream",
             uploaded_at=uploaded_at,
         )
+
+    def delete_file(self, storage_path: str | None) -> None:
+        if not storage_path:
+            return
+
+        target_path = Path(storage_path)
+        if not target_path.is_absolute():
+            target_path = Path.cwd() / target_path
+
+        if target_path.exists():
+            target_path.unlink()

@@ -1,9 +1,19 @@
+from datetime import datetime
 from pathlib import Path
 
 from fastapi import UploadFile
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from sqlalchemy.orm import selectinload
 
 from backend.app.models.document import Document
+from backend.app.schemas.documents import (
+    DocumentCollectionInfo,
+    DocumentDetailResponse,
+    DocumentListItem,
+    DocumentUploadResponse,
+)
 from backend.app.services.collection_service import get_collection
 from backend.app.services.storage import LocalFileStorage
 
@@ -23,7 +33,13 @@ class UnsupportedDocumentTypeError(Exception):
     """Raised when an uploaded file type is not supported."""
 
 
-def upload_document(db: Session, collection_id: int, file: UploadFile) -> Document:
+class DocumentNotFoundError(Exception):
+    """Raised when the requested document does not exist."""
+
+
+def upload_document(
+    db: Session, collection_id: int, file: UploadFile
+) -> DocumentUploadResponse:
     get_collection(db, collection_id)
 
     extension = Path(file.filename or "").suffix.lower()
@@ -58,4 +74,76 @@ def upload_document(db: Session, collection_id: int, file: UploadFile) -> Docume
     db.add(document)
     db.commit()
     db.refresh(document)
+    return DocumentUploadResponse.model_validate(document)
+
+
+def list_documents_for_collection(
+    db: Session, collection_id: int
+) -> list[DocumentListItem]:
+    get_collection(db, collection_id)
+    statement = (
+        select(Document)
+        .where(Document.collection_id == collection_id)
+        .options(selectinload(Document.collection), selectinload(Document.chunks))
+        .order_by(Document.created_at.desc(), Document.id.desc())
+    )
+    documents = list(db.scalars(statement))
+    return [serialize_document(document) for document in documents]
+
+
+def get_document_detail(db: Session, document_id: int) -> DocumentDetailResponse:
+    document = _get_document_model(db, document_id)
+    return serialize_document_detail(document)
+
+
+def delete_document(db: Session, document_id: int) -> None:
+    document = _get_document_model(db, document_id)
+    storage = LocalFileStorage()
+    storage.delete_file(document.metadata_json.get("storage_path"))
+    db.delete(document)
+    db.commit()
+
+
+def serialize_document(document: Document) -> DocumentListItem:
+    uploaded_at_raw = document.metadata_json.get("uploaded_at")
+    uploaded_at = _parse_uploaded_at(uploaded_at_raw)
+    return DocumentListItem(
+        id=document.id,
+        filename=document.filename,
+        source_type=document.source_type,
+        status=document.status,
+        collection=DocumentCollectionInfo(
+            id=document.collection.id,
+            name=document.collection.name,
+        ),
+        uploaded_at=uploaded_at,
+        chunk_count=len(document.chunks),
+        ingestion_metadata=document.metadata_json,
+    )
+
+
+def serialize_document_detail(document: Document) -> DocumentDetailResponse:
+    summary = serialize_document(document)
+    return DocumentDetailResponse(
+        **summary.model_dump(),
+        created_at=document.created_at,
+        updated_at=document.updated_at,
+    )
+
+
+def _get_document_model(db: Session, document_id: int) -> Document:
+    statement = (
+        select(Document)
+        .where(Document.id == document_id)
+        .options(selectinload(Document.collection), selectinload(Document.chunks))
+    )
+    document = db.scalar(statement)
+    if document is None:
+        raise DocumentNotFoundError
     return document
+
+
+def _parse_uploaded_at(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    return datetime.fromisoformat(value)

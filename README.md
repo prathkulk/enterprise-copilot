@@ -16,6 +16,7 @@ This initial commit sets up:
 - SQLAlchemy ORM, session management, and initial relational models
 - pgvector extension support and vector-ready chunk embeddings
 - document upload endpoint with local filesystem storage
+- document list, detail, and delete APIs
 
 ## Project structure
 
@@ -41,6 +42,7 @@ This initial commit sets up:
 │   │   │   ├── document_chunk.py
 │   │   │   └── ingestion_job.py
 │   │   ├── services
+│   │   │   ├── collection_service.py
 │   │   │   ├── document_service.py
 │   │   │   ├── storage.py
 │   │   │   └── vector_search.py
@@ -127,6 +129,9 @@ docker compose down
 - `PATCH /collections/{collection_id}` updates a collection.
 - `DELETE /collections/{collection_id}` deletes a collection.
 - `POST /collections/{collection_id}/documents/upload` uploads a PDF, DOCX, or TXT file.
+- `GET /collections/{collection_id}/documents` lists documents for a collection.
+- `GET /documents/{document_id}` fetches a single document with collection and ingestion details.
+- `DELETE /documents/{document_id}` removes a document and its stored file copy.
 - `POST /debug/vector-search/seed` inserts mock chunk rows with fake embeddings.
 - `POST /debug/vector-search/query` runs a temporary top-k similarity search.
 
