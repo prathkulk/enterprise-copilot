@@ -6,14 +6,19 @@ from backend.app.schemas.chat import (
     ChatSessionCreate,
     ChatSessionMessagesResponse,
     ChatSessionResponse,
+    MessageFeedbackCreate,
+    MessageFeedbackResponse,
     SessionAskRequest,
     SessionAskResponse,
 )
 from backend.app.services.chat_service import (
+    ChatMessageNotFoundError,
     ChatSessionNotFoundError,
+    InvalidFeedbackTargetError,
     ask_within_session,
     create_chat_session,
     list_session_messages,
+    submit_message_feedback,
 )
 from backend.app.services.collection_service import CollectionNotFoundError
 from backend.app.services.embeddings import EmbeddingProviderError
@@ -78,4 +83,28 @@ def ask_in_session(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(exc),
+        ) from exc
+
+
+@router.post(
+    "/messages/{message_id}/feedback",
+    response_model=MessageFeedbackResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_message_feedback(
+    message_id: int,
+    payload: MessageFeedbackCreate,
+    db: Session = Depends(get_db_session),
+):
+    try:
+        return submit_message_feedback(db=db, message_id=message_id, payload=payload)
+    except ChatMessageNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Chat message not found",
+        ) from exc
+    except InvalidFeedbackTargetError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Feedback can only be submitted for assistant messages",
         ) from exc

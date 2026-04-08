@@ -15,6 +15,7 @@ from backend.app.models import (
     document,
     document_chunk,
     ingestion_job,
+    message_feedback,
 )
 
 settings = get_settings()

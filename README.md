@@ -29,6 +29,7 @@ This initial commit sets up:
 - background ingestion jobs with polling
 - chat sessions with persisted multi-turn message history
 - conversation-aware session retrieval with follow-up query rewriting
+- answer feedback capture for relevance signals
 
 ## Project structure
 
@@ -57,7 +58,8 @@ This initial commit sets up:
 │   │   │   ├── collection.py
 │   │   │   ├── document.py
 │   │   │   ├── document_chunk.py
-│   │   │   └── ingestion_job.py
+│   │   │   ├── ingestion_job.py
+│   │   │   └── message_feedback.py
 │   │   ├── prompts
 │   │   │   ├── __init__.py
 │   │   │   ├── grounded_answer.py
@@ -179,6 +181,7 @@ docker compose down
 - `POST /sessions` creates a persistent chat session, optionally scoped to a default collection.
 - `GET /sessions/{session_id}/messages` returns ordered user and assistant turns with citations and timestamps.
 - `POST /sessions/{session_id}/ask` runs grounded Q&A within a session, rewrites follow-up questions into standalone retrieval queries, and stores the turn history.
+- `POST /messages/{message_id}/feedback` stores thumbs up/down or numeric answer feedback with an optional comment.
 - `POST /retrieve` embeds a question and returns top-k semantic chunk matches.
 - `POST /answer` retrieves supporting chunks and returns a grounded answer with inline citations.
 - `POST /ask` runs the full query embedding, retrieval, and grounded answer flow in one call.
@@ -236,6 +239,7 @@ The backend currently creates these relational tables:
 
 - `chat_sessions`
 - `chat_messages`
+- `message_feedback`
 - `collections`
 - `documents`
 - `document_chunks`
@@ -250,6 +254,7 @@ If you change embedding models or dimensions, existing stored embeddings are cle
 Ingestion jobs currently move through `pending`, `processing`, `indexed`, and `failed`.
 Session asks persist both the user question and assistant answer so multi-turn history can be retrieved later from `/sessions/{session_id}/messages`.
 Session follow-up questions now use recent session turns to generate a standalone retrieval query before semantic search runs.
+Answer feedback can now be attached to assistant messages for later relevance evaluation and ranking improvements.
 
 ## Vector verification
 

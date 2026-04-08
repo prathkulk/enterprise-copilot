@@ -23,3 +23,8 @@ class ChatMessage(TimestampMixin, BaseModel):
     )
 
     session = relationship("ChatSession", back_populates="messages")
+    feedback_entries = relationship(
+        "MessageFeedback",
+        back_populates="message",
+        cascade="all, delete-orphan",
+    )

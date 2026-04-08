@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from backend.app.schemas.answers import AnswerCitation
 from backend.app.schemas.ask import AskResponse
@@ -57,3 +57,33 @@ class SessionAskResponse(AskResponse):
     rewrite_applied: bool
     rewrite_prompt_version: str
     rewrite_history_messages_used: int
+
+
+class MessageFeedbackCreate(BaseModel):
+    signal: Literal["up", "down"] | None = None
+    rating: int | None = Field(default=None, ge=1, le=5)
+    comment: str | None = Field(default=None, max_length=2000)
+
+    @field_validator("comment")
+    @classmethod
+    def normalize_comment(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        return normalized or None
+
+    @model_validator(mode="after")
+    def ensure_feedback_signal(self) -> "MessageFeedbackCreate":
+        if self.signal is None and self.rating is None:
+            raise ValueError("Either signal or rating must be provided.")
+        return self
+
+
+class MessageFeedbackResponse(BaseModel):
+    id: int
+    message_id: int
+    signal: Literal["up", "down"] | None
+    rating: int | None
+    comment: str | None
+    created_at: datetime
+    updated_at: datetime

@@ -4,6 +4,7 @@ from backend.app.models.collection import Collection
 from backend.app.models.document import Document
 from backend.app.models.document_chunk import DocumentChunk
 from backend.app.models.ingestion_job import IngestionJob
+from backend.app.models.message_feedback import MessageFeedback
 
 __all__ = [
     "ChatMessage",
@@ -12,4 +13,5 @@ __all__ = [
     "Document",
     "DocumentChunk",
     "IngestionJob",
+    "MessageFeedback",
 ]

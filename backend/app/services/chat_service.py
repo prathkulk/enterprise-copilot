@@ -4,9 +4,12 @@ from pydantic import ValidationError
 
 from backend.app.models.chat_message import ChatMessage
 from backend.app.models.chat_session import ChatSession
+from backend.app.models.message_feedback import MessageFeedback
 from backend.app.schemas.ask import AskRequest
 from backend.app.schemas.chat import (
     ChatMessageResponse,
+    MessageFeedbackCreate,
+    MessageFeedbackResponse,
     ChatSessionCreate,
     ChatSessionMessagesResponse,
     ChatSessionResponse,
@@ -20,6 +23,14 @@ from backend.app.services.conversation_rewrite import rewrite_query_with_history
 
 class ChatSessionNotFoundError(Exception):
     """Raised when the requested chat session does not exist."""
+
+
+class ChatMessageNotFoundError(Exception):
+    """Raised when the requested chat message does not exist."""
+
+
+class InvalidFeedbackTargetError(Exception):
+    """Raised when feedback targets a non-assistant message."""
 
 
 def create_chat_session(db: Session, payload: ChatSessionCreate) -> ChatSessionResponse:
@@ -152,11 +163,37 @@ def ask_within_session(
     )
 
 
+def submit_message_feedback(
+    db: Session, message_id: int, payload: MessageFeedbackCreate
+) -> MessageFeedbackResponse:
+    message = _get_chat_message(db, message_id)
+    if message.role != "assistant":
+        raise InvalidFeedbackTargetError
+
+    feedback = MessageFeedback(
+        message_id=message.id,
+        signal=payload.signal,
+        rating=payload.rating,
+        comment=payload.comment,
+    )
+    db.add(feedback)
+    db.commit()
+    db.refresh(feedback)
+    return _serialize_feedback(feedback)
+
+
 def _get_chat_session(db: Session, session_id: int) -> ChatSession:
     session = db.get(ChatSession, session_id)
     if session is None:
         raise ChatSessionNotFoundError
     return session
+
+
+def _get_chat_message(db: Session, message_id: int) -> ChatMessage:
+    message = db.get(ChatMessage, message_id)
+    if message is None:
+        raise ChatMessageNotFoundError
+    return message
 
 
 def _list_session_message_models(db: Session, session_id: int) -> list[ChatMessage]:
@@ -188,4 +225,16 @@ def _serialize_message(message: ChatMessage) -> ChatMessageResponse:
         metadata_json=message.metadata_json,
         created_at=message.created_at,
         updated_at=message.updated_at,
+    )
+
+
+def _serialize_feedback(feedback: MessageFeedback) -> MessageFeedbackResponse:
+    return MessageFeedbackResponse(
+        id=feedback.id,
+        message_id=feedback.message_id,
+        signal=feedback.signal,
+        rating=feedback.rating,
+        comment=feedback.comment,
+        created_at=feedback.created_at,
+        updated_at=feedback.updated_at,
     )
