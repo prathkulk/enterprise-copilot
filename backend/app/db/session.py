@@ -8,7 +8,14 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from backend.app.core.config import get_settings
 from backend.app.db.base import Base
-from backend.app.models import collection, document, document_chunk, ingestion_job
+from backend.app.models import (
+    chat_message,
+    chat_session,
+    collection,
+    document,
+    document_chunk,
+    ingestion_job,
+)
 
 settings = get_settings()
 VECTOR_TYPE_PATTERN = re.compile(r"^vector\((\d+)\)$")

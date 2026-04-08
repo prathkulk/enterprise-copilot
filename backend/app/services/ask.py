@@ -19,17 +19,10 @@ def ask_question(payload: AskRequest, db: Session) -> AskResponse:
     embedding_provider = get_embedding_provider()
     llm_provider = get_llm_provider()
     total_started_at = perf_counter()
+    retrieval_request = RetrievalRequest.model_validate(payload.model_dump())
 
     retrieval_started_at = perf_counter()
-    retrieval_response = retrieve_chunks(
-        db=db,
-        payload=RetrievalRequest(
-            question=payload.question,
-            collection_id=payload.collection_id,
-            document_id=payload.document_id,
-            top_k=payload.top_k,
-        ),
-    )
+    retrieval_response = retrieve_chunks(db=db, payload=retrieval_request)
     retrieval_duration_ms = round((perf_counter() - retrieval_started_at) * 1000, 3)
 
     answer_started_at = perf_counter()
@@ -41,13 +34,13 @@ def ask_question(payload: AskRequest, db: Session) -> AskResponse:
     total_duration_ms = round((perf_counter() - total_started_at) * 1000, 3)
 
     return AskResponse(
-        question=payload.question,
-        collection_id=payload.collection_id,
-        document_id=payload.document_id,
-        document_ids=payload.document_ids,
-        tags=payload.tags,
-        source_types=payload.source_types,
-        top_k=payload.top_k,
+        question=retrieval_request.question,
+        collection_id=retrieval_request.collection_id,
+        document_id=retrieval_request.document_id,
+        document_ids=retrieval_request.document_ids,
+        tags=retrieval_request.tags,
+        source_types=retrieval_request.source_types,
+        top_k=retrieval_request.top_k,
         answer=answer_response.answer,
         confidence=answer_response.confidence,
         insufficient_evidence=answer_response.insufficient_evidence,

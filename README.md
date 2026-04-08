@@ -27,6 +27,7 @@ This initial commit sets up:
 - versioned grounded-answer prompt templates and guardrails
 - retrieval narrowing by document, tags, source type, upload date, and collection metadata
 - background ingestion jobs with polling
+- chat sessions with persisted multi-turn message history
 
 ## Project structure
 
@@ -37,6 +38,7 @@ This initial commit sets up:
 │   │   ├── api
 │   │   │   ├── routes
 │   │   │   │   ├── collections.py
+│   │   │   │   ├── chat.py
 │   │   │   │   ├── documents.py
 │   │   │   │   ├── jobs.py
 │   │   │   │   ├── retrieval.py
@@ -49,6 +51,8 @@ This initial commit sets up:
 │   │   │   ├── base.py
 │   │   │   └── session.py
 │   │   ├── models
+│   │   │   ├── chat_message.py
+│   │   │   ├── chat_session.py
 │   │   │   ├── collection.py
 │   │   │   ├── document.py
 │   │   │   ├── document_chunk.py
@@ -59,6 +63,7 @@ This initial commit sets up:
 │   │   ├── schemas
 │   │   │   ├── ask.py
 │   │   │   ├── answers.py
+│   │   │   ├── chat.py
 │   │   │   ├── collections.py
 │   │   │   ├── documents.py
 │   │   │   ├── jobs.py
@@ -66,6 +71,7 @@ This initial commit sets up:
 │   │   ├── services
 │   │   │   ├── ask.py
 │   │   │   ├── answer_generation.py
+│   │   │   ├── chat_service.py
 │   │   │   ├── chunking.py
 │   │   │   ├── collection_service.py
 │   │   │   ├── document_parsers.py
@@ -167,6 +173,9 @@ docker compose down
 - `POST /documents/{document_id}/chunk` runs temporary chunk generation and stores chunk rows.
 - `POST /documents/{document_id}/ingest` queues non-blocking extraction, chunking, embedding, and indexing.
 - `GET /jobs/{job_id}` polls ingestion job status and progress.
+- `POST /sessions` creates a persistent chat session, optionally scoped to a default collection.
+- `GET /sessions/{session_id}/messages` returns ordered user and assistant turns with citations and timestamps.
+- `POST /sessions/{session_id}/ask` runs grounded Q&A within a session and stores the turn history.
 - `POST /retrieve` embeds a question and returns top-k semantic chunk matches.
 - `POST /answer` retrieves supporting chunks and returns a grounded answer with inline citations.
 - `POST /ask` runs the full query embedding, retrieval, and grounded answer flow in one call.
@@ -222,6 +231,8 @@ curl -X POST http://127.0.0.1:8000/documents/1/extract
 
 The backend currently creates these relational tables:
 
+- `chat_sessions`
+- `chat_messages`
 - `collections`
 - `documents`
 - `document_chunks`
@@ -234,6 +245,7 @@ Answer generation is provider-driven via config and now defaults to `openai` wit
 Document statuses currently move through `uploaded`, `processing`, `indexed`, and `failed`.
 If you change embedding models or dimensions, existing stored embeddings are cleared and affected documents are marked `uploaded` so they can be re-ingested.
 Ingestion jobs currently move through `pending`, `processing`, `indexed`, and `failed`.
+Session asks persist both the user question and assistant answer so multi-turn history can be retrieved later from `/sessions/{session_id}/messages`.
 
 ## Vector verification
 

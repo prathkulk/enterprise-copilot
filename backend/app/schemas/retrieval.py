@@ -4,7 +4,7 @@ from typing import Any
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 
-class RetrievalRequest(BaseModel):
+class RetrievalRequestBase(BaseModel):
     question: str = Field(min_length=1)
     collection_id: int | None = None
     document_id: int | None = None
@@ -49,12 +49,8 @@ class RetrievalRequest(BaseModel):
         normalized = value.strip()
         return normalized or None
 
-    @model_validator(mode="after")
-    def ensure_filter_present(self) -> "RetrievalRequest":
-        if self.uploaded_from and self.uploaded_to and self.uploaded_from > self.uploaded_to:
-            raise ValueError("uploaded_from must be earlier than or equal to uploaded_to.")
-
-        has_scope_filter = any(
+    def has_scope_filter(self) -> bool:
+        return any(
             (
                 self.collection_id is not None,
                 self.document_id is not None,
@@ -67,10 +63,20 @@ class RetrievalRequest(BaseModel):
                 self.collection_description_contains is not None,
             )
         )
-        if not has_scope_filter:
-            raise ValueError(
-                "At least one retrieval filter must be provided."
-            )
+
+    @model_validator(mode="after")
+    def validate_date_range(self) -> "RetrievalRequestBase":
+        if self.uploaded_from and self.uploaded_to and self.uploaded_from > self.uploaded_to:
+            raise ValueError("uploaded_from must be earlier than or equal to uploaded_to.")
+        return self
+
+
+class RetrievalRequest(RetrievalRequestBase):
+    @model_validator(mode="after")
+    def ensure_filter_present(self) -> "RetrievalRequest":
+        if not self.has_scope_filter():
+            raise ValueError("At least one retrieval filter must be provided.")
+
         return self
 
 

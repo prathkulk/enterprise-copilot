@@ -247,12 +247,7 @@ def generate_answer_from_chunks(
 def generate_answer(payload: AnswerRequest, db: Session) -> AnswerResponse:
     retrieval_response = retrieve_chunks(
         db=db,
-        payload=RetrievalRequest(
-            question=payload.question,
-            collection_id=payload.collection_id,
-            document_id=payload.document_id,
-            top_k=payload.top_k,
-        ),
+        payload=RetrievalRequest.model_validate(payload.model_dump()),
     )
     return generate_answer_from_chunks(
         question=payload.question,
